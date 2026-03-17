@@ -1,66 +1,77 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router";
-import SignIn from "./pages/AuthPages/SignIn";
-import SignUp from "./pages/AuthPages/SignUp";
-import NotFound from "./pages/OtherPage/NotFound";
-import UserProfiles from "./pages/UserProfiles";
-import Videos from "./pages/UiElements/Videos";
-import Images from "./pages/UiElements/Images";
-import Alerts from "./pages/UiElements/Alerts";
-import Badges from "./pages/UiElements/Badges";
-import Avatars from "./pages/UiElements/Avatars";
-import Buttons from "./pages/UiElements/Buttons";
-import LineChart from "./pages/Charts/LineChart";
-import BarChart from "./pages/Charts/BarChart";
-import Calendar from "./pages/Calendar";
-import BasicTables from "./pages/Tables/BasicTables";
-import FormElements from "./pages/Forms/FormElements";
-import Blank from "./pages/Blank";
-import AppLayout from "./layout/AppLayout";
-import { ScrollToTop } from "./components/common/ScrollToTop";
-import Home from "./pages/Dashboard/Home";
+import { Routes, Route, Navigate } from 'react-router';
+import { useAuth } from './context/AuthContext';
+
+import AppLayout from './layout/AppLayout';
+import SignIn from './pages/AuthPages/SignIn';
+import SignUp from './pages/AuthPages/SignUp';
+import NotFound from './pages/OtherPage/NotFound';
+
+import AdminDashboard from './pages/Dashboard/AdminDashboard';
+import ChefDashboard from './pages/Dashboard/ChefDashboard';
+import EmployeDashboard from './pages/Dashboard/EmployeDashboard';
+
+import ProjectsList from './pages/Projects/ProjectsList';
+import ProjectDetail from './pages/Projects/ProjectDetail';
+import FormElements from './pages/Forms/FormElements';
+
+import TasksList from './pages/Tasks/TasksList';
+import UsersList from './pages/Users/UsersList';
+import Calendar from './pages/Calendar';
+import UserProfiles from './pages/UserProfiles';
+import RiskAnalysis from './pages/RiskAnalysis';
+
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  return user ? <>{children}</> : <Navigate to="/signin" replace />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/signin" replace />;
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
+function ChefAdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/signin" replace />;
+  if (user.role !== 'admin' && user.role !== 'chef_projet') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
+function DashboardHome() {
+  const { isAdmin, isChef } = useAuth();
+  if (isAdmin) return <AdminDashboard />;
+  if (isChef) return <ChefDashboard />;
+  return <EmployeDashboard />;
+}
 
 export default function App() {
   return (
-    <>
-      <Router>
-        <ScrollToTop />
-        <Routes>
-          {/* Dashboard Layout */}
-          <Route element={<AppLayout />}>
-            <Route index path="/" element={<Home />} />
+    <Routes>
+      <Route path="/signin" element={<SignIn />} />
+      <Route path="/signup" element={<SignUp />} />
 
-            {/* Others Page */}
-            <Route path="/profile" element={<UserProfiles />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/blank" element={<Blank />} />
+      <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardHome />} />
 
-            {/* Forms */}
-            <Route path="/form-elements" element={<FormElements />} />
+        <Route path="/projects" element={<ProjectsList />} />
+        <Route path="/projects/new" element={<ChefAdminRoute><FormElements /></ChefAdminRoute>} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
 
-            {/* Tables */}
-            <Route path="/basic-tables" element={<BasicTables />} />
+        <Route path="/tasks" element={<TasksList />} />
 
-            {/* Ui Elements */}
-            <Route path="/alerts" element={<Alerts />} />
-            <Route path="/avatars" element={<Avatars />} />
-            <Route path="/badge" element={<Badges />} />
-            <Route path="/buttons" element={<Buttons />} />
-            <Route path="/images" element={<Images />} />
-            <Route path="/videos" element={<Videos />} />
+        <Route path="/risk" element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
 
-            {/* Charts */}
-            <Route path="/line-chart" element={<LineChart />} />
-            <Route path="/bar-chart" element={<BarChart />} />
-          </Route>
+        <Route path="/calendar" element={<Calendar />} />
 
-          {/* Auth Layout */}
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
+        <Route path="/users" element={<AdminRoute><UsersList /></AdminRoute>} />
 
-          {/* Fallback Route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Router>
-    </>
+        <Route path="/profile" element={<UserProfiles />} />
+      </Route>
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
