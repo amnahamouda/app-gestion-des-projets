@@ -18,7 +18,7 @@ import TasksList from './pages/Tasks/TasksList';
 import UsersList from './pages/Users/UsersList';
 import Calendar from './pages/Calendar';
 import UserProfiles from './pages/UserProfiles';
-import RiskAnalysis from './pages/RiskAnalysis';
+import RiskAnalysis from './pages/Risk/RiskDashboard';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
