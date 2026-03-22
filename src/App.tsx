@@ -19,6 +19,7 @@ import UsersList from './pages/Users/UsersList';
 import Calendar from './pages/Calendar';
 import UserProfiles from './pages/UserProfiles';
 import RiskAnalysis from './pages/Risk/RiskDashboard';
+import TeamPage from './pages/Team/TeamPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -63,6 +64,8 @@ export default function App() {
         <Route path="/tasks" element={<TasksList />} />
 
         <Route path="/risk" element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
+
+        <Route path="/team" element={<ChefAdminRoute><TeamPage /></ChefAdminRoute>} />
 
         <Route path="/calendar" element={<Calendar />} />
 

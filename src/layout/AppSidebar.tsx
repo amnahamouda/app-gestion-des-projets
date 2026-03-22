@@ -7,8 +7,9 @@ const navItems = [
   { path: '/projects', label: 'Projets', icon: '📁', roles: ['chef_projet', 'employe'] },
   { path: '/tasks', label: 'Tâches', icon: '✅', roles: ['chef_projet', 'employe'] },
   { path: '/risk', label: 'Analyse des risques', icon: '🔍', roles: ['chef_projet'] },
+  { path: '/team', label: "Gestion de l'équipe", icon: '👥', roles: ['chef_projet', 'admin'] },
   { path: '/calendar', label: 'Calendrier', icon: '📅', roles: ['chef_projet', 'employe'] },
-  { path: '/users', label: 'Utilisateurs', icon: '👥', roles: ['admin'] },
+  { path: '/users', label: 'Utilisateurs', icon: '🔧', roles: ['admin'] },
   { path: '/profile', label: 'Mon profil', icon: '👤', roles: ['admin', 'chef_projet', 'employe'] },
 ];
 

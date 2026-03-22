@@ -16,12 +16,12 @@ export default function SignIn() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (blocked) return;
     setLoading(true);
     setError('');
-    const result = login(email, password);
+    const result = await login(email, password);
     if (result.success) {
       navigate('/dashboard');
     } else {
@@ -62,7 +62,7 @@ export default function SignIn() {
           <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>Connectez-vous à votre espace</p>
         </div>
 
-        {/* ── Formulaire Login ── */}
+        {/* Login Form */}
         {!showForgot ? (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
@@ -125,14 +125,11 @@ export default function SignIn() {
           </form>
 
         ) : (
-          /* ── Formulaire Mot de passe oublié ── */
           <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔑</div>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '0 0 4px 0' }}>Mot de passe oublié</h2>
-              <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>
-                Entrez votre email pour recevoir un lien de réinitialisation
-              </p>
+              <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>Entrez votre email pour recevoir un lien de réinitialisation</p>
             </div>
 
             {forgotSent ? (
@@ -155,11 +152,7 @@ export default function SignIn() {
                     onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.boxShadow = 'none'; }}
                   />
                 </div>
-
-                <button
-                  type="submit"
-                  style={{ width: '100%', padding: '13px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 15px rgba(30,58,138,0.3)' }}
-                >
+                <button type="submit" style={{ width: '100%', padding: '13px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 15px rgba(30,58,138,0.3)' }}>
                   Envoyer le lien →
                 </button>
               </>
