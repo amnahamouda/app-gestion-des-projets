@@ -12,6 +12,7 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
+   token: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole }>;
   logout: () => void;
   isAdmin: boolean;
@@ -27,6 +28,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = localStorage.getItem('mdw-user');
     return stored ? JSON.parse(stored) : null;
+  });
+  
+  const [token, setToken] = useState<string | null>(() => {
+    return localStorage.getItem('mdw-token');
   });
 
   const login = async (email: string, password: string): Promise<{ success: boolean; role?: UserRole }> => {
@@ -92,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
+      token, 
       login,
       logout,
       isAdmin: user?.role === 'admin',
