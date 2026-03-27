@@ -279,6 +279,7 @@ export default function UsersList() {
     nom_complet: '',
     prenom: '',
     email: '',
+    password: '',
     role: 'employe' as UserRole,
     matricule: '',
     telephone: '',
@@ -304,6 +305,7 @@ export default function UsersList() {
       nom_complet: user.nom_complet || '',
       prenom: user.prenom || '',
       email: user.email || '',
+      password: '',
       role: user.role,
       matricule: user.matricule || '',
       telephone: user.telephone || '',
@@ -325,65 +327,73 @@ export default function UsersList() {
   };
 
   // ===================== METTRE À JOUR UN UTILISATEUR =====================
-  const handleUpdateUser = async () => {
-    if (!editingUser) return;
+ const handleUpdateUser = async () => {
+  if (!editingUser) return;
 
-    if (!editForm.nom_complet || !editForm.email || !editForm.departement) {
-      setFormError('Nom complet, email et département sont obligatoires.');
-      return;
+  if (!editForm.nom_complet || !editForm.email || !editForm.departement) {
+    setFormError('Nom complet, email et département sont obligatoires.');
+    return;
+  }
+
+  setEditLoading(true);
+  setFormError('');
+
+  try {
+    // ✅ Construire l'objet à envoyer
+    const updateData: any = {
+      nom_complet: editForm.nom_complet,
+      prenom: editForm.prenom || null,
+      email: editForm.email,
+      password:editForm.password,
+      role: editForm.role,
+      matricule: editForm.matricule || null,
+      telephone: editForm.telephone || null,
+      departement: editForm.departement,
+      poste: editForm.poste || null,
+      ville: editForm.ville || null,
+      wilaya: editForm.wilaya || null,
+      adresse: editForm.adresse || null,
+      code_postal: editForm.code_postal || null,
+      date_embauche: editForm.date_embauche || null,
+      date_naissance: editForm.date_naissance || null,
+      lieu_naissance: editForm.lieu_naissance || null,
+      genre: editForm.genre || null,
+      situation_familiale: editForm.situation_familiale || null,
+      nombre_enfants: editForm.nombre_enfants || 0,
+    };
+
+    // ✅ Ajouter le mot de passe seulement s'il a été saisi
+    if (editForm.password && editForm.password.trim() !== '') {
+      updateData.password = editForm.password;
     }
 
-    setEditLoading(true);
-    setFormError('');
+    const response = await fetch(`${API_URL}/auth/users/${editingUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateData),
+    });
 
-    try {
-      const response = await fetch(`${API_URL}/auth/users/${editingUser.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          nom_complet: editForm.nom_complet,
-          prenom: editForm.prenom || null,
-          email: editForm.email,
-          role: editForm.role,
-          matricule: editForm.matricule || null,
-          telephone: editForm.telephone || null,
-          departement: editForm.departement,
-          poste: editForm.poste || null,
-          ville: editForm.ville || null,
-          wilaya: editForm.wilaya || null,
-          adresse: editForm.adresse || null,
-          code_postal: editForm.code_postal || null,
-          date_embauche: editForm.date_embauche || null,
-          date_naissance: editForm.date_naissance || null,
-          lieu_naissance: editForm.lieu_naissance || null,
-          genre: editForm.genre || null,
-          situation_familiale: editForm.situation_familiale || null,
-          nombre_enfants: editForm.nombre_enfants || 0,
-        }),
-      });
+    const data = await response.json();
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setSuccessMsg(`✅ Utilisateur "${editForm.nom_complet}" modifié avec succès !`);
-        setShowEditModal(false);
-        setEditingUser(null);
-        fetchUsers();
-        setTimeout(() => setSuccessMsg(''), 5000);
-      } else {
-        setFormError(data.message || 'Erreur lors de la modification');
-      }
-    } catch (error) {
-      console.error('Erreur modification:', error);
-      setFormError('Erreur de connexion au serveur');
-    } finally {
-      setEditLoading(false);
+    if (response.ok && data.success) {
+      setSuccessMsg(`✅ Utilisateur "${editForm.nom_complet}" modifié avec succès !`);
+      setShowEditModal(false);
+      setEditingUser(null);
+      fetchUsers();
+      setTimeout(() => setSuccessMsg(''), 5000);
+    } else {
+      setFormError(data.message || 'Erreur lors de la modification');
     }
-  };
-
+  } catch (error) {
+    console.error('Erreur modification:', error);
+    setFormError('Erreur de connexion au serveur');
+  } finally {
+    setEditLoading(false);
+  }
+};
   // Charger les users au montage
   useEffect(() => {
     if (isAdmin && token) {
@@ -955,6 +965,19 @@ export default function UsersList() {
                     />
                   </div>
                 </div>
+                 <div>
+              <label style={labelStyle}>Mot de passe</label>
+              <input
+                type="password"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                placeholder="Laisser vide pour ne pas modifier"
+                style={inputStyle}
+              />
+              <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
+                🔒 Laissez vide pour conserver le mot de passe actuel
+              </p>
+            </div>
               </div>
 
               {/* Section 2: Informations professionnelles */}

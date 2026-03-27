@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ChartOptions } from 'chart.js';
 import { Link } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -79,6 +80,8 @@ export default function AdminDashboard() {
   const { token, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StatistiquesGlobales | null>(null);
+    console.log("STATS:", stats);
+  console.log("UTILISATEURS:", stats?.utilisateurs);
   const [activite, setActivite] = useState<ActiviteRecente[]>([]);
   const [projets, setProjets] = useState<Projet[]>([]);
   const [usersList, setUsersList] = useState<User[]>([]);
@@ -98,7 +101,63 @@ export default function AdminDashboard() {
       console.error('Erreur chargement vue globale:', error);
     }
   };
-
+const activiteChartOptions: ChartOptions<'line'> = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    title: {
+      display: true,
+      text: 'Activité des utilisateurs',
+    },
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+    },
+  },
+};
+const tachesChartOptions: ChartOptions<'bar'> = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    title: {
+      display: true,
+      text: 'État des tâches',
+    },
+  },
+}; 
+const usersChartOptions: ChartOptions<'doughnut'> = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'bottom',
+    },
+    title: {
+      display: true,
+      text: 'Répartition des utilisateurs',
+    },
+  },
+}; 
+const projetsChartOptions: ChartOptions<'bar'> = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top',
+    },
+    title: {
+      display: true,
+      text: 'Répartition des projets par statut',
+    },
+  },
+}; 
   // Récupérer les projets récents
   const fetchProjetsRecents = async () => {
     try {
@@ -192,21 +251,7 @@ export default function AdminDashboard() {
     ],
   };
 
-  const projetsChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Répartition des projets par statut',
-        font: { size: 14, weight: 'bold' },
-      },
-    },
-  };
-
+ 
   // Configuration du graphique en camembert (Répartition des utilisateurs)
   const usersChartData = {
     labels: ['Admins', 'Chefs de projet', 'Employés'],
@@ -223,20 +268,7 @@ export default function AdminDashboard() {
     ],
   };
 
-  const usersChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom' as const,
-      },
-      title: {
-        display: true,
-        text: 'Répartition des utilisateurs',
-        font: { size: 14, weight: 'bold' },
-      },
-    },
-  };
+ 
 
   // Configuration du graphique linéaire (Activité récente)
   const activiteChartData = {
@@ -258,29 +290,7 @@ export default function AdminDashboard() {
     ],
   };
 
-  const activiteChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'Activité des utilisateurs (7 derniers jours)',
-        font: { size: 14, weight: 'bold' },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          stepSize: 1,
-        },
-      },
-    },
-  };
-
+  
   // Configuration du graphique en barres (Tâches)
   const tachesChartData = {
     labels: ['Terminées', 'En retard', 'En cours'],
@@ -298,21 +308,7 @@ export default function AdminDashboard() {
     ],
   };
 
-  const tachesChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-      },
-      title: {
-        display: true,
-        text: 'État des tâches',
-        font: { size: 14, weight: 'bold' },
-      },
-    },
-  };
-
+  
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: '40px' }}>
 
@@ -325,7 +321,7 @@ export default function AdminDashboard() {
           Tableau de bord Administrateur
         </h1>
         <p style={{ color: '#6b7280', fontSize: '13px', marginTop: '4px' }}>
-          Bienvenue {user?.nom_complet || 'Admin'}
+          Bienvenue 
         </p>
       </div>
 
@@ -489,9 +485,11 @@ export default function AdminDashboard() {
         <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '14px', padding: '20px', color: '#fff' }}>
           <p style={{ fontSize: '12px', opacity: 0.8, margin: '0 0 8px 0' }}>Taux d'activité</p>
           <p style={{ fontSize: '2rem', fontWeight: 700, margin: 0 }}>
-            {stats?.utilisateurs.total > 0 
-              ? Math.round((stats?.utilisateurs.actifs / stats?.utilisateurs.total) * 100) 
-              : 0}%
+            {stats?.utilisateurs?.total > 0
+  ? Math.round(
+      (Number(stats.utilisateurs.actifs) / Number(stats.utilisateurs.total)) * 100
+    )
+  : 0}%
           </p>
           <p style={{ fontSize: '11px', opacity: 0.8, marginTop: '8px' }}>utilisateurs actifs</p>
         </div>
