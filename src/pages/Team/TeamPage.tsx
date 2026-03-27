@@ -370,15 +370,15 @@ useEffect(() => {
             <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
               <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e' }}></span>
-                0-1 tâche: Disponible
+                0-3 tâche: Disponible
               </span>
               <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#eab308' }}></span>
-                2 tâches: Occupé
+                4 tâches: Occupé
               </span>
               <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }}></span>
-                3+ tâches: Surchargé
+                4+ tâches: Surchargé
               </span>
             </div>
           </div>
@@ -452,9 +452,9 @@ useEffect(() => {
             style={{ padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: '#fff' }}
           >
             <option value="all">Tous les statuts</option>
-            <option value="Disponible">🟢 Disponible (0-1 tâche)</option>
-            <option value="Occupé">🟡 Occupé (2 tâches)</option>
-            <option value="Surchargé">🔴 Surchargé (3+ tâches)</option>
+            <option value="Disponible">🟢 Disponible (0-3 tâche)</option>
+            <option value="Occupé">🟡 Occupé (4 tâches)</option>
+            <option value="Surchargé">🔴 Surchargé (4+ tâches)</option>
           </select>
         </div>
 
@@ -513,7 +513,7 @@ useEffect(() => {
                     </div>
                     {m.charge_actuelle && m.charge_actuelle >= 3 && (
                       <div style={{ marginTop: '8px', padding: '4px 8px', background: '#fee2e2', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '10px', color: '#dc2626' }}>⚠️ Surcharge - Réaffecter des tâches</span>
+                        <span style={{ fontSize: '10px', color: '#dc2626' }}></span>
                       </div>
                     )}
                   </div>
