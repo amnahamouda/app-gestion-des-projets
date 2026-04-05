@@ -111,8 +111,8 @@ export default function ProjectDetail() {
           date_debut: data.projet.date_debut ? new Date(data.projet.date_debut).toISOString().split('T')[0] : '',
           date_fin_prevue: data.projet.date_fin_prevue ? new Date(data.projet.date_fin_prevue).toISOString().split('T')[0] : '',
           progression: data.projet.progression || 0,
-          total_taches: data.projet.total_taches || 0,
-          taches_terminees: data.projet.taches_terminees || 0
+           total_taches: data.projet.total_taches || 0,
+    taches_terminees: data.projet.taches_terminees || 0
         });
       }
     } catch (error) {
@@ -353,8 +353,7 @@ export default function ProjectDetail() {
       </div>
     );
   }
-
-  const canEdit = isChef || isAdmin || user?.id === chef_projet_id;
+const canEdit = isChef || isAdmin || user?.id === project.chef_projet_id;
 
   return (
     <div className="space-y-6">

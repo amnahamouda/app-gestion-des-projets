@@ -2,13 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 
-// ===================== DONNÉES STATIQUES =====================
-const initialProjectsStatic: Project[] = [
-  { id: 'PRJ-001', name: 'Refonte site e-commerce', description: 'Refonte complète du site.', chef: 'Amine Belhadj', status: 'En cours', priority: 'Haute', progress: 65, startDate: '2025-01-10', endDate: '2025-04-30', tasks: 18 },
-  { id: 'PRJ-002', name: 'Application mobile RH', description: 'App mobile pour la gestion RH.', chef: 'Sara Mansouri', status: 'En cours', priority: 'Moyenne', progress: 20, startDate: '2025-03-01', endDate: '2025-07-15', tasks: 12 },
-  { id: 'PRJ-003', name: 'Dashboard analytique', description: 'Dashboard de visualisation de données.', chef: 'Karim Ouali', status: 'Terminé', priority: 'Basse', progress: 100, startDate: '2024-10-01', endDate: '2025-01-31', tasks: 24 },
-  { id: 'PRJ-004', name: 'Portail client B2B', description: 'Portail pour les clients B2B.', chef: 'Amine Belhadj', status: 'En attente', priority: 'Haute', progress: 5, startDate: '2025-02-15', endDate: '2025-06-30', tasks: 9 },
-];
+
+
 
 // ===================== INTERFACES =====================
 interface Project {
@@ -119,12 +114,12 @@ export default function ProjectsList() {
 
   // Fusion des projets
   const allProjects: Project[] = [
-    ...initialProjectsStatic,
+
     ...projectsBackend
   ];
 
   // ===================== CHARGER LES PROJETS =====================
-  const fetchProjects = async () => {
+const fetchProjects = async () => {
   try {
     setLoading(true);
     const response = await fetch(`${API_URL}/projets`, {
@@ -137,21 +132,15 @@ export default function ProjectsList() {
     if (!response.ok) throw new Error('Erreur chargement');
     
     const data = await response.json();
+    console.log('📊 Données reçues:', data); // ✅ LOG
+    
     if (data.success) {
       const formattedProjects = data.projets.map((p: any) => {
-        // ✅ CORRECTION DE L'AVANCEMENT
+        // ✅ Prendre la progression directement du backend SANS modification
         let progress = p.progression || 0;
         
-        // Si le projet est terminé, avancement = 100%
-        if (p.statut === 'termine') {
-          progress = 100;
-        }
-        // Si le projet est en attente, avancement max = 5%
-        else if (p.statut === 'en_attente' && progress > 5) {
-          progress = 5;
-        }
-        
-        console.log(`📊 ${p.nom_projet} - statut: ${p.statut} - progression: ${progress}`);
+        // ✅ Ajouter un log pour voir la valeur
+        console.log(`📊 Projet ${p.nom_projet} (ID:${p.id}): progression brute = ${p.progression}, progress final = ${progress}`);
         
         return {
           id: String(p.id),
@@ -161,7 +150,7 @@ export default function ProjectsList() {
           chef_id: p.chef_projet_id,
           status: traduireStatut(p.statut),
           priority: traduirePriorite(p.priorite),
-          progress: progress,
+          progress: progress,  // ✅ Utiliser directement la valeur
           startDate: p.date_debut ? new Date(p.date_debut).toISOString().split('T')[0] : '',
           endDate: p.date_fin_prevue ? new Date(p.date_fin_prevue).toISOString().split('T')[0] : '',
           tasks: p.nb_taches || 0
@@ -175,7 +164,6 @@ export default function ProjectsList() {
     setLoading(false);
   }
 };
-
   // ===================== CHARGER LES CHEFS =====================
   const fetchChefs = async () => {
     try {
@@ -438,6 +426,7 @@ export default function ProjectsList() {
             </thead>
             <tbody>
               {filtered.map((p) => {
+                console.log(`Affichage projet ${p.name}: progress = ${p.progress}`);
                 const sc = statusColor[p.status] ?? { bg: '#f1f5f9', color: '#475569' };
                 const pc = priorityColor[p.priority] ?? { bg: '#f1f5f9', color: '#475569' };
                 return (
@@ -461,7 +450,7 @@ export default function ProjectsList() {
                     <td style={{ padding: '14px 16px', minWidth: '140px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ flex: 1, height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${p.progress}%`, background: p.progress === 100 ? '#16a34a' : '#1d4ed8', borderRadius: '999px' }} />
+                          <div style={{ height: '100%', width: `${p.progress}%`,background: p.progress === 100 ? '#16a34a' : '#1d4ed8', borderRadius: '999px' }} />
                         </div>
                         <span style={{ fontSize: '12px', color: '#94a3b8' }}>{p.progress}%</span>
                       </div>
