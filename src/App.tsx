@@ -21,6 +21,9 @@ import UserProfiles from './pages/UserProfiles';
 import RiskAnalysis from './pages/Risk/RiskDashboard';
 import TeamPage from './pages/Team/TeamPage';
 
+// ✅ Ajoute l'import du Chatbot
+import Chatbot from './components/Chatbot/Chatbot';
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return user ? <>{children}</> : <Navigate to="/signin" replace />;
@@ -49,32 +52,38 @@ function DashboardHome() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
+    <>
+      {/* Routes */}
+      <Routes>
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
 
-      <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardHome />} />
+        <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardHome />} />
 
-        <Route path="/projects" element={<ProjectsList />} />
-        <Route path="/projects/new" element={<ChefAdminRoute><FormElements /></ChefAdminRoute>} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/projects" element={<ProjectsList />} />
+          <Route path="/projects/new" element={<ChefAdminRoute><FormElements /></ChefAdminRoute>} />
+          <Route path="/projects/:id" element={<ProjectDetail />} />
 
-        <Route path="/tasks" element={<TasksList />} />
+          <Route path="/tasks" element={<TasksList />} />
 
-        <Route path="/risk" element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
+          <Route path="/risk" element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
 
-        <Route path="/team" element={<ChefAdminRoute><TeamPage /></ChefAdminRoute>} />
+          <Route path="/team" element={<ChefAdminRoute><TeamPage /></ChefAdminRoute>} />
 
-        <Route path="/calendar" element={<Calendar />} />
+          <Route path="/calendar" element={<Calendar />} />
 
-        <Route path="/users" element={<AdminRoute><UsersList /></AdminRoute>} />
+          <Route path="/users" element={<AdminRoute><UsersList /></AdminRoute>} />
 
-        <Route path="/profile" element={<UserProfiles />} />
-      </Route>
+          <Route path="/profile" element={<UserProfiles />} />
+        </Route>
 
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+
+      {/* ✅ Chatbot - En dehors des routes pour apparaître partout */}
+      <Chatbot />
+    </>
   );
 }
