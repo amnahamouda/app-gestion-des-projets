@@ -15,7 +15,6 @@ interface Member {
   telephone?: string;
   poste?: string;
   status: number;
-  // Données de charge et performance
   charge_actuelle?: number;
   taches_terminees?: number;
   taches_actives?: number;
@@ -23,6 +22,35 @@ interface Member {
   taches_en_retard?: number;
   disponibilite?: string;
 }
+
+// ── Design tokens — same palette as AdminDashboard ──────────
+const T = {
+  navy950: '#0c1a3a',
+  navy900: '#0f2057',
+  blue700: '#1d4ed8',
+  blue600: '#1e40af',
+  blue400: '#60a5fa',
+  blue100: '#dbeafe',
+  blue50:  '#eff6ff',
+  slate900: '#0f172a',
+  slate700: '#334155',
+  slate500: '#64748b',
+  slate400: '#94a3b8',
+  slate300: '#cbd5e1',
+  slate100: '#f1f5f9',
+  slate50:  '#f8fafc',
+  white:    '#ffffff',
+  rose:     '#e11d48',
+  rose50:   '#fff1f2',
+  roseMid:  '#fecdd3',
+  green:    '#15803d',
+  green50:  '#f0fdf4',
+  greenMid: '#bbf7d0',
+  amber:    '#b45309',
+  amber50:  '#fffbeb',
+  purple:   '#6d28d9',
+  purple50: '#f5f3ff',
+};
 
 export default function TeamPage() {
   const { token, user, isAdmin, isChef } = useAuth();
@@ -45,37 +73,22 @@ export default function TeamPage() {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [performanceData, setPerformanceData] = useState<any>(null);
-  const [statsData, setStatsData] = useState<any>(null);
 
-  // ==================== US1: ADMIN - LISTER LES MEMBRES ====================
+  // ── Fetch functions ──────────────────────────────────────
   const fetchMembres = async () => {
     try {
-      const response = await fetch(`${API_URL}/equipe/membres`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      console.log('📊 Membres reçus:', data);
-      
-      if (data.success) {
-        setMembers(data.membres || []);
-      }
-    } catch (error) {
-      console.error('Erreur chargement membres:', error);
-    }
+      const r = await fetch(`${API_URL}/equipe/membres`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) setMembers(d.membres || []);
+    } catch (e) { console.error(e); }
   };
 
-  // ==================== US2: CHEF - DISPONIBILITÉ DES EMPLOYÉS ====================
   const fetchDisponibilite = async () => {
     try {
-      const response = await fetch(`${API_URL}/equipe/disponibilite`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      console.log('📊 Disponibilité:', data);
-      
-      if (data.success) {
-        // Transformer les données de disponibilité en format membre
-        const membresFormatted = data.employes.map((e: any) => ({
+      const r = await fetch(`${API_URL}/equipe/disponibilite`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) {
+        setMembers(d.employes.map((e: any) => ({
           id: e.id,
           nom_complet: e.nom,
           email: e.email,
@@ -85,466 +98,382 @@ export default function TeamPage() {
           taches_terminees: e.taches_terminees,
           total_taches: e.total_taches,
           taches_en_retard: e.taches_en_retard,
-          disponibilite: e.disponibilite
-        }));
-        setMembers(membresFormatted);
-        setStatsData(data);
+          disponibilite: e.disponibilite,
+        })));
       }
-    } catch (error) {
-      console.error('Erreur chargement disponibilité:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  // ==================== US3: CHEF - PERFORMANCE DE L'ÉQUIPE ====================
   const fetchPerformance = async () => {
     try {
-      const response = await fetch(`${API_URL}/equipe/performance`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      console.log('📊 Performance:', data);
-      
-      if (data.success) {
-        setPerformanceData(data);
-      }
-    } catch (error) {
-      console.error('Erreur chargement performance:', error);
-    }
+      const r = await fetch(`${API_URL}/equipe/performance`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) setPerformanceData(d);
+    } catch (e) { console.error(e); }
   };
 
-  // ==================== US4: CHEF - CALCUL CHARGE AUTOMATIQUE ====================
- // ==================== US4: CHEF - CALCUL CHARGE AUTOMATIQUE ====================
-const fetchChargeAuto = async () => {
-  try {
-    const response = await fetch(`${API_URL}/equipe/charge-auto`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await response.json();
-    console.log('📊 Charge auto:', data);
-    
-    if (data.success) {
-      setMembers(prev => prev.map(m => {
-        const chargeData = data.analyse_charge?.find((c: any) => c.employe.id === m.id);
-        if (chargeData) {
-          const aFaire = chargeData.details?.a_faire || 0;      // ✅ ajouté
-          const enCours = chargeData.details?.en_cours || 0;
-          const terminees = chargeData.details?.terminees || 0;
-          
-          return {
-            ...m,
-            charge_actuelle: Number(chargeData.charge),          // ✅ forcer number
-            taches_actives: aFaire + enCours,                   // ✅ corrigé
-            taches_terminees: terminees,
-            total_taches: aFaire + enCours + terminees          // ✅ corrigé
-          };
-        }
-        return m;
-      }));
-    }
-  } catch (error) {
-    console.error('Erreur chargement charge auto:', error);
-  }
-};
-  // ==================== ADMIN - AJOUTER UN MEMBRE ====================
+  const fetchChargeAuto = async () => {
+    try {
+      const r = await fetch(`${API_URL}/equipe/charge-auto`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) {
+        setMembers(prev => prev.map(m => {
+          const cd = d.analyse_charge?.find((c: any) => c.employe.id === m.id);
+          if (cd) {
+            const aFaire   = cd.details?.a_faire   || 0;
+            const enCours  = cd.details?.en_cours   || 0;
+            const termines = cd.details?.terminees  || 0;
+            return { ...m, charge_actuelle: Number(cd.charge), taches_actives: aFaire + enCours, taches_terminees: termines, total_taches: aFaire + enCours + termines };
+          }
+          return m;
+        }));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  // ── CRUD ────────────────────────────────────────────────
   const handleCreateMember = async () => {
     if (!form.nom_complet || !form.email || !form.password || !form.departement) {
       setFormError('Tous les champs sont obligatoires.');
       return;
     }
-
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
+      const r = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
+      const d = await r.json();
+      if (r.ok && d.success) {
         setShowModal(false);
         setForm({ nom_complet: '', email: '', password: '', role: 'employe', departement: '', telephone: '', poste: '' });
         setFormError('');
-        setSuccessMsg(`✅ "${form.nom_complet}" ajouté avec succès`);
+        setSuccessMsg(`✓ "${form.nom_complet}" ajouté avec succès`);
         setTimeout(() => setSuccessMsg(''), 3000);
         fetchMembres();
       } else {
-        setFormError(data.message || 'Erreur lors de la création');
+        setFormError(d.message || 'Erreur lors de la création');
       }
-    } catch (error) {
-      console.error('Erreur création:', error);
-      setFormError('Erreur de connexion');
-    }
+    } catch (e) { console.error(e); setFormError('Erreur de connexion'); }
   };
 
-  // ==================== ADMIN - MODIFIER UN MEMBRE ====================
   const handleUpdateMember = async () => {
     if (!selectedMember) return;
-    
     try {
-      const response = await fetch(`${API_URL}/equipe/membres/${selectedMember.id}`, {
+      const r = await fetch(`${API_URL}/equipe/membres/${selectedMember.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setSuccessMsg(`✅ Membre modifié avec succès`);
+      const d = await r.json();
+      if (r.ok && d.success) {
+        setSuccessMsg('✓ Membre modifié avec succès');
         setTimeout(() => setSuccessMsg(''), 3000);
         fetchMembres();
         setSelectedMember(null);
         setEditForm({});
       } else {
-        setFormError(data.message || 'Erreur lors de la modification');
+        setFormError(d.message || 'Erreur lors de la modification');
       }
-    } catch (error) {
-      console.error('Erreur modification:', error);
-      setFormError('Erreur de connexion');
-    }
+    } catch (e) { console.error(e); setFormError('Erreur de connexion'); }
   };
 
-  // ==================== ADMIN - DÉSACTIVER UN MEMBRE ====================
   const handleDesactiver = async (id: number, nom: string) => {
     if (!window.confirm(`Désactiver ${nom} ?`)) return;
-    
     try {
-      const response = await fetch(`${API_URL}/equipe/membres/${id}/desactiver`, {
+      const r = await fetch(`${API_URL}/equipe/membres/${id}/desactiver`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setSuccessMsg(`✅ ${nom} désactivé`);
+      const d = await r.json();
+      if (r.ok && d.success) {
+        setSuccessMsg(`✓ ${nom} désactivé`);
         setTimeout(() => setSuccessMsg(''), 3000);
         fetchMembres();
       } else {
-        alert(data.message || 'Erreur lors de la désactivation');
+        alert(d.message || 'Erreur lors de la désactivation');
       }
-    } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur de connexion');
+    } catch (e) { console.error(e); alert('Erreur de connexion'); }
+  };
+
+  // ── Helpers ─────────────────────────────────────────────
+  const getStatus = (charge?: number): { label: string; color: string; bg: string; bar: string } => {
+    const n = Number(charge) || 0;
+    if (n <= 3) return { label: 'Disponible', color: T.green,   bg: T.green50, bar: T.green   };
+    if (n === 4) return { label: 'Occupé',    color: T.amber,   bg: T.amber50, bar: T.amber   };
+    return             { label: 'Surchargé', color: T.rose,    bg: T.rose50,  bar: T.rose    };
+  };
+
+  const getPerformance = (m: Member) => {
+    const total = m.total_taches || 0;
+    const done  = m.taches_terminees || 0;
+    return total > 0 ? Math.round((done / total) * 100) : 0;
+  };
+
+  useEffect(() => {
+    if (token) {
+      (async () => {
+        setLoading(true);
+        if (isAdmin) { await fetchMembres(); await fetchChargeAuto(); }
+        else if (isChef) { await fetchDisponibilite(); await fetchPerformance(); }
+        setLoading(false);
+      })();
     }
-  };
+  }, [token, isAdmin, isChef]);
 
-  // ==================== FONCTION getStatus CORRIGÉE ====================
-const getStatus = (charge?: number): { label: string; color: string; bg: string; dot: string; icon: string } => {
-  const n = Number(charge) || 0;   // ✅ convertir string → number (MySQL يرجع string أحياناً)
-  
-  if (n <= 3) {
-    return { label: 'Disponible', color: '#16a34a', bg: '#dcfce7', dot: '#22c55e', icon: '🟢' };
-  }
-  if (n === 4) {
-    return { label: 'Occupé', color: '#f59e0b', bg: '#fef9c3', dot: '#eab308', icon: '🟡' };
-  }
-  return { label: 'Surchargé', color: '#dc2626', bg: '#fee2e2', dot: '#ef4444', icon: '🔴' };
-};
-
-  // Calculer la performance individuelle
-  const getPerformance = (member: Member): number => {
-    const total = member.total_taches || 0;
-    const terminees = member.taches_terminees || 0;
-    return total > 0 ? Math.round((terminees / total) * 100) : 0;
-  };
-
-  // Charger les données selon le rôle
- // ==================== useEffect CORRIGÉ ====================
-useEffect(() => {
-  if (token) {
-    const loadData = async () => {
-      setLoading(true);
-      
-      if (isAdmin) {
-        await fetchMembres();
-        await fetchChargeAuto();   // ✅ تعبي charge_actuelle بعد fetchMembres
-      } 
-      else if (isChef) {
-        await fetchDisponibilite(); // ✅ هي وحدها كافية، charge_actuelle موجودة
-        await fetchPerformance();
-        // ❌ fetchChargeAuto() محذوفة للشاف — كانت تكتب فوق القيم
-      }
-      
-      setLoading(false);
-    };
-    loadData();
-  }
-}, [token, isAdmin, isChef]);
-
-  // Filtrer les membres
-  const filtered = members.filter((m) => {
-    const matchSearch = m.nom_complet?.toLowerCase().includes(search.toLowerCase()) ||
-      m.email?.toLowerCase().includes(search.toLowerCase());
-    const status = getStatus(m.charge_actuelle).label;
-    const matchStatus = filterStatus === 'all' || status === filterStatus;
+  const filtered = members.filter(m => {
+    const matchSearch = m.nom_complet?.toLowerCase().includes(search.toLowerCase()) || m.email?.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === 'all' || getStatus(m.charge_actuelle).label === filterStatus;
     return matchSearch && matchStatus;
   });
 
-  // Stats globales
   const statsCards = [
-    { 
-      label: 'Total membres', 
-      value: members.length, 
-      icon: '👥', 
-      color: '#0f172a', 
-      bg: '#f8fafc' 
-    },
-    { 
-      label: 'Disponibles', 
-      value: members.filter(m => getStatus(m.charge_actuelle).label === 'Disponible').length, 
-      icon: '🟢', 
-      color: '#16a34a', 
-      bg: '#dcfce7' 
-    },
-    { 
-      label: 'Occupés', 
-      value: members.filter(m => getStatus(m.charge_actuelle).label === 'Occupé').length, 
-      icon: '🟡', 
-      color: '#f59e0b', 
-      bg: '#fef9c3' 
-    },
-    { 
-      label: 'Surchargés', 
-      value: members.filter(m => getStatus(m.charge_actuelle).label === 'Surchargé').length, 
-      icon: '🔴', 
-      color: '#dc2626', 
-      bg: '#fee2e2' 
-    },
+    { label: 'Total membres',  value: members.length,                                                                         accent: T.blue600,  accentLight: T.blue50,  icon: '◉' },
+    { label: 'Disponibles',    value: members.filter(m => getStatus(m.charge_actuelle).label === 'Disponible').length,        accent: T.green,    accentLight: T.green50, icon: '◎' },
+    { label: 'Occupés',        value: members.filter(m => getStatus(m.charge_actuelle).label === 'Occupé').length,            accent: T.amber,    accentLight: T.amber50, icon: '◈' },
+    { label: 'Surchargés',     value: members.filter(m => getStatus(m.charge_actuelle).label === 'Surchargé').length,         accent: T.rose,     accentLight: T.rose50,  icon: '▲' },
   ];
 
-  const roleLabels: Record<string, string> = {
-    admin: 'Admin',
-    chef_projet: 'Chef de projet',
-    employe: 'Employé',
-  };
-
+  const roleLabels: Record<string, string> = { admin: 'Admin', chef_projet: 'Chef de projet', employe: 'Employé' };
   const roleColors: Record<string, { bg: string; color: string }> = {
-    admin: { bg: '#f3e8ff', color: '#6b21a8' },
-    chef_projet: { bg: '#dbeafe', color: '#1e40af' },
-    employe: { bg: '#dcfce7', color: '#166534' },
+    admin:       { bg: T.purple50, color: T.purple  },
+    chef_projet: { bg: T.blue50,   color: T.blue600 },
+    employe:     { bg: T.green50,  color: T.green   },
   };
 
+  const avatarPalette = [T.blue600, T.navy900, T.purple, '#db2777', '#ea580c', T.slate700];
+
+  // ── Input shared style ───────────────────────────────────
+  const inputSx: React.CSSProperties = {
+    padding: '11px 14px',
+    border: `1px solid ${T.slate300}`,
+    borderRadius: '10px',
+    background: T.slate50,
+    color: T.slate900,
+    fontSize: '14px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  };
+
+  // ── Guards ───────────────────────────────────────────────
   if (!isAdmin && !isChef) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem' }}>
-        <p>⛔ Accès réservé aux administrateurs et chefs de projet</p>
-        <Link to="/dashboard" style={{ color: '#1e40af' }}>Retour au dashboard</Link>
+        <p style={{ color: T.slate500 }}>⛔ Accès réservé aux administrateurs et chefs de projet</p>
+        <Link to="/dashboard" style={{ color: T.blue600 }}>Retour au dashboard</Link>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
-        <p>Chargement...</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
+        <div style={{ width: 44, height: 44, border: `3px solid ${T.blue100}`, borderTop: `3px solid ${T.blue600}`, borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+        <p style={{ color: T.slate500, fontWeight: 500, fontSize: 14 }}>Chargement...</p>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
   }
 
+  // ── Render ───────────────────────────────────────────────
   return (
     <>
-      
+      <PageMeta title="Gestion de l'équipe" />
       <PageBreadcrumb pageTitle="Gestion de l'équipe" />
 
-      <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: '1400px', margin: '0 auto', padding: '0 20px' }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+        .kcard{transition:box-shadow .2s,transform .2s}
+        .kcard:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(30,64,175,.13)!important}
+        .mcard{transition:box-shadow .2s,transform .2s}
+        .mcard:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,64,175,.1)!important}
+        .prow-btn{transition:background .15s}
+        .prow-btn:hover{background:${T.blue50}!important}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        .fu{animation:fadeUp .35s ease both}
+        .dot-pulse{animation:dotPulse 2s ease-in-out infinite}
+        @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+      `}</style>
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+      <div style={{ fontFamily: "'DM Sans','Segoe UI',sans-serif", display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+        {/* ── Header ── */}
+        <div className="fu" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-              {isAdmin ? 'Gestion de l\'équipe' : 'Disponibilité de l\'équipe'}
+            <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: T.blue600, letterSpacing: 1.2, textTransform: 'uppercase' }}>Équipe</p>
+            <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: T.slate900, letterSpacing: '-0.5px' }}>
+              {isAdmin ? "Gestion de l'équipe" : "Disponibilité de l'équipe"}
             </h1>
-            <p style={{ color: '#64748b', marginTop: '4px' }}>
-              {isAdmin 
-                ? 'Gérer les membres de l\'équipe (ajout, modification, désactivation)'
-                : 'Consulter la disponibilité et performance des employés'}
+            <p style={{ margin: '4px 0 12px', fontSize: 13, color: T.slate500, fontWeight: 500 }}>
+              {isAdmin ? 'Ajout, modification et désactivation des membres' : 'Disponibilité et performance des employés'}
             </p>
-            {/* Légende des statuts */}
-            <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-              <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e' }}></span>
-                0-3 tâche: Disponible
-              </span>
-              <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#eab308' }}></span>
-                4 tâches: Occupé
-              </span>
-              <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }}></span>
-                4+ tâches: Surchargé
-              </span>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              {[
+                { dot: T.green, text: '0-3 tâches : Disponible' },
+                { dot: T.amber, text: '4 tâches : Occupé' },
+                { dot: T.rose,  text: '5+ tâches : Surchargé' },
+              ].map(s => (
+                <span key={s.text} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, color: T.slate500, fontWeight: 500 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.dot, display: 'inline-block' }} />{s.text}
+                </span>
+              ))}
             </div>
           </div>
           {isAdmin && (
             <button
               onClick={() => { setShowModal(true); setFormError(''); }}
-              style={{ padding: '10px 20px', background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '10px 20px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: `0 4px 14px ${T.blue600}44` }}
             >
               + Ajouter un membre
             </button>
           )}
         </div>
 
-        {/* Message succès */}
+        {/* ── Success banner ── */}
         {successMsg && (
-          <div style={{ padding: '12px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', color: '#166534', marginBottom: '20px' }}>
-            ✓ {successMsg}
+          <div className="fu" style={{ padding: '12px 16px', background: T.green50, border: `1px solid ${T.greenMid}`, borderRadius: 12, color: T.green, fontWeight: 600, fontSize: 13 }}>
+            {successMsg}
           </div>
         )}
 
-        {/* US3: Performance globale (visible uniquement pour chef) */}
+        {/* ── Chef: performance globale ── */}
         {isChef && performanceData && (
-          <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', borderRadius: '16px', padding: '20px', marginBottom: '24px', color: '#fff' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 12px 0' }}>📊 Performance globale de l'équipe</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-              <div>
-                <p style={{ fontSize: '12px', opacity: 0.8, margin: 0 }}>Tâches totales</p>
-                <p style={{ fontSize: '28px', fontWeight: 700, margin: '4px 0 0 0' }}>{performanceData.performance_globale?.total_taches || 0}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', opacity: 0.8, margin: 0 }}>Tâches terminées</p>
-                <p style={{ fontSize: '28px', fontWeight: 700, margin: '4px 0 0 0' }}>{performanceData.performance_globale?.taches_terminees || 0}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', opacity: 0.8, margin: 0 }}>Taux de réussite</p>
-                <p style={{ fontSize: '28px', fontWeight: 700, margin: '4px 0 0 0' }}>{performanceData.performance_globale?.taux_reussite || '0%'}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', opacity: 0.8, margin: 0 }}>Durée moyenne</p>
-                <p style={{ fontSize: '16px', fontWeight: 600, margin: '4px 0 0 0' }}>{performanceData.performance_globale?.duree_moyenne || 'N/A'}</p>
-              </div>
+          <div className="fu" style={{ background: `linear-gradient(135deg, ${T.navy950} 0%, ${T.navy900} 55%, ${T.blue600} 100%)`, borderRadius: 18, padding: '22px 24px' }}>
+            <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.55)', textTransform: 'uppercase', letterSpacing: 1 }}>Statistiques globales</p>
+            <h2 style={{ margin: '0 0 16px', fontWeight: 700, color: T.white, fontSize: 14 }}>Performance globale de l'équipe</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
+              {[
+                { label: 'Tâches totales',   value: performanceData.performance_globale?.total_taches   || 0 },
+                { label: 'Tâches terminées', value: performanceData.performance_globale?.taches_terminees || 0 },
+                { label: 'Taux de réussite', value: performanceData.performance_globale?.taux_reussite   || '0%' },
+                { label: 'Durée moyenne',    value: performanceData.performance_globale?.duree_moyenne   || 'N/A' },
+              ].map(s => (
+                <div key={s.label} style={{ background: 'rgba(255,255,255,.1)', borderRadius: 12, padding: '16px 14px', border: '0.5px solid rgba(255,255,255,.15)', textAlign: 'center' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.17)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.1)')}>
+                  <p style={{ margin: '0 0 6px', fontSize: 11, color: 'rgba(255,255,255,.6)', fontWeight: 500 }}>{s.label}</p>
+                  <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: T.white, letterSpacing: '-0.5px', lineHeight: 1 }}>{s.value}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Stats Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-          {statsCards.map((s) => (
-            <div key={s.label} style={{ background: '#fff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <span style={{ fontSize: '20px' }}>{s.icon}</span>
-                <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{s.label}</p>
-              </div>
-              <p style={{ fontSize: '28px', fontWeight: 700, color: s.color, margin: 0 }}>{s.value}</p>
+        {/* ── KPI cards ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
+          {statsCards.map((s, i) => (
+            <div key={s.label} className="kcard fu" style={{ background: T.white, border: `1px solid ${T.slate100}`, borderRadius: 18, padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,.05)', position: 'relative', overflow: 'hidden', animationDelay: `${i * 0.06}s` }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: s.accent, borderRadius: '18px 18px 0 0' }} />
+              <div style={{ width: 38, height: 38, background: s.accentLight, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: s.accent, fontWeight: 700, marginBottom: 12 }}>{s.icon}</div>
+              <p style={{ margin: '0 0 3px', fontSize: 11, fontWeight: 600, color: T.slate500, textTransform: 'uppercase', letterSpacing: '.7px' }}>{s.label}</p>
+              <p style={{ margin: 0, fontSize: '1.9rem', fontWeight: 800, color: T.slate900, letterSpacing: '-1.5px', lineHeight: 1 }}>{s.value}</p>
             </div>
           ))}
         </div>
 
-        {/* Filtres */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {/* ── Search + filter ── */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <input
             type="text"
             placeholder="Rechercher un membre..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: 1, maxWidth: '300px', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none' }}
+            onChange={e => setSearch(e.target.value)}
+            style={{ ...inputSx, flex: 1, maxWidth: 320 }}
           />
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            style={{ padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: '#fff' }}
+            onChange={e => setFilterStatus(e.target.value)}
+            style={{ ...inputSx, width: 'auto', cursor: 'pointer' }}
           >
             <option value="all">Tous les statuts</option>
-            <option value="Disponible">🟢 Disponible (0-3 tâche)</option>
-            <option value="Occupé">🟡 Occupé (4 tâches)</option>
-            <option value="Surchargé">🔴 Surchargé (4+ tâches)</option>
+            <option value="Disponible">Disponible</option>
+            <option value="Occupé">Occupé</option>
+            <option value="Surchargé">Surchargé</option>
           </select>
         </div>
 
-        {/* Grille membres */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-          {filtered.map((m) => {
-            const status = getStatus(m.charge_actuelle);
-            const roleColorData = roleColors[m.role] || { bg: '#f1f5f9', color: '#475569' };
-            const performance = getPerformance(m);
-            const loadPercent = Math.min(((m.charge_actuelle || 0) / 5) * 100, 100);
-            const total = m.total_taches || 0;
-            const terminees = m.taches_terminees || 0;
-
+        {/* ── Members grid ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 18 }}>
+          {filtered.length === 0 ? (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 48, color: T.slate500 }}>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
+              <p style={{ fontWeight: 600, fontSize: 14 }}>Aucun membre trouvé</p>
+            </div>
+          ) : filtered.map((m, i) => {
+            const status      = getStatus(m.charge_actuelle);
+            const rc          = roleColors[m.role] || { bg: T.slate100, color: T.slate500 };
+            const perf        = getPerformance(m);
+            const loadPct     = Math.min(((m.charge_actuelle || 0) / 5) * 100, 100);
+            const avColor     = avatarPalette[m.id % avatarPalette.length];
             return (
-              <div key={m.id} style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', transition: 'all 0.2s' }}>
-                {/* En-tête */}
-                <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 600, fontSize: '18px' }}>
+              <div key={m.id} className="mcard fu" style={{ background: T.white, borderRadius: 20, border: `1px solid ${T.slate100}`, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.05)', animationDelay: `${i * 0.04}s` }}>
+                {/* Card header */}
+                <div style={{ padding: '18px 20px', borderBottom: `1px solid ${T.slate100}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 46, height: 46, background: avColor, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.white, fontWeight: 700, fontSize: 17, flexShrink: 0 }}>
                     {m.nom_complet?.[0]?.toUpperCase() || 'U'}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: '16px' }}>{m.nom_complet}</p>
-                    <p style={{ color: '#64748b', fontSize: '12px', margin: '2px 0 0 0' }}>{m.email}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: T.slate900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nom_complet}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: T.slate500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</p>
                   </div>
-                  <div style={{ padding: '4px 12px', borderRadius: '20px', background: status.bg }}>
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: status.color }}>
-                      {status.icon} {status.label}
-                    </span>
+                  <div style={{ padding: '3px 10px', borderRadius: 20, background: status.bg, border: `1px solid ${status.color}22`, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: status.color }}>{status.label}</span>
                   </div>
                 </div>
 
-                {/* Corps */}
-                <div style={{ padding: '16px 20px' }}>
-                  {/* Rôle */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', background: roleColorData.bg, color: roleColorData.color }}>
+                {/* Card body */}
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: rc.bg, color: rc.color }}>
                       {roleLabels[m.role] || m.role}
                     </span>
                     {m.departement && (
-                      <span style={{ fontSize: '11px', marginLeft: '8px', color: '#94a3b8' }}>
+                      <span style={{ fontSize: 11, color: T.slate500, display: 'flex', alignItems: 'center', gap: 4 }}>
                         📂 {m.departement}
                       </span>
                     )}
                   </div>
 
-                  {/* Charge de travail (US4) */}
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>Charge de travail</span>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: status.color }}>
-                        {m.charge_actuelle || 0} tâche(s) active(s)
-                      </span>
+                  {/* Charge */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: T.slate500, fontWeight: 500 }}>Charge de travail</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: status.color }}>{m.charge_actuelle || 0} tâche(s)</span>
                     </div>
-                    <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${loadPercent}%`, background: status.color, borderRadius: '10px' }} />
+                    <div style={{ height: 5, background: T.slate100, borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${loadPct}%`, background: status.bar, borderRadius: 99, transition: 'width .4s' }} />
                     </div>
-                    {m.charge_actuelle && m.charge_actuelle >= 3 && (
-                      <div style={{ marginTop: '8px', padding: '4px 8px', background: '#fee2e2', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '10px', color: '#dc2626' }}></span>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Performance (US3) */}
+                  {/* Performance */}
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>Performance</span>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#16a34a' }}>{performance}%</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: T.slate500, fontWeight: 500 }}>Performance</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.blue600 }}>{perf}%</span>
                     </div>
-                    <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${performance}%`, background: '#16a34a', borderRadius: '10px' }} />
+                    <div style={{ height: 5, background: T.slate100, borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${perf}%`, background: T.blue600, borderRadius: 99, transition: 'width .4s' }} />
                     </div>
-                    <p style={{ fontSize: '11px', color: '#94a3b8', margin: '8px 0 0 0' }}>
-                      {terminees} terminées · {total} au total
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: T.slate400 }}>
+                      {m.taches_terminees || 0} terminées · {m.total_taches || 0} au total
                     </p>
                   </div>
                 </div>
 
-                {/* Boutons */}
-                <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '10px' }}>
+                {/* Card footer */}
+                <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.slate100}`, display: 'flex', gap: 10 }}>
                   <button
+                    className="prow-btn"
                     onClick={() => setSelectedMember(m)}
-                    style={{ flex: 1, padding: '8px', background: '#eff6ff', color: '#1e40af', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
+                    style={{ flex: 1, padding: '8px', background: T.blue50, color: T.blue600, border: `1px solid ${T.blue100}`, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                   >
                     Voir détail
                   </button>
                   {isAdmin && (
                     <button
                       onClick={() => handleDesactiver(m.id, m.nom_complet)}
-                      style={{ padding: '8px 16px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
+                      style={{ padding: '8px 14px', background: T.rose50, color: T.rose, border: `1px solid ${T.roseMid}`, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
                     >
                       Désactiver
                     </button>
@@ -555,91 +484,137 @@ useEffect(() => {
           })}
         </div>
 
-        {/* Modal Détail Membre (comme avant) */}
+        {/* ── Detail modal ── */}
         {selectedMember && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => setSelectedMember(null)}>
-            <div style={{ background: '#fff', borderRadius: '24px', maxWidth: '500px', width: '100%', padding: '28px', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ width: '56px', height: '56px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '20px' }}>
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+            onClick={() => setSelectedMember(null)}
+          >
+            <div
+              style={{ background: T.white, borderRadius: 24, maxWidth: 500, width: '100%', padding: 28, boxShadow: '0 24px 64px rgba(0,0,0,.2)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 52, height: 52, background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.white, fontWeight: 700, fontSize: 20 }}>
                     {selectedMember.nom_complet?.[0]?.toUpperCase() || 'U'}
                   </div>
                   <div>
-                    <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{selectedMember.nom_complet}</h2>
-                    <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0 0 0' }}>{selectedMember.email}</p>
+                    <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: T.slate900 }}>{selectedMember.nom_complet}</h2>
+                    <p style={{ margin: '3px 0 0', fontSize: 12, color: T.slate500 }}>{selectedMember.email}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedMember(null)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+                <button onClick={() => setSelectedMember(null)} style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', fontSize: 18, color: T.slate500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+              {/* Info grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
                 {[
-                  { label: 'Rôle', value: roleLabels[selectedMember.role] || selectedMember.role },
-                  { label: 'Département', value: selectedMember.departement || 'Non défini' },
-                  { label: 'Statut', value: getStatus(selectedMember.charge_actuelle).label },
-                  { label: 'Tâches actives', value: selectedMember.charge_actuelle || 0 },
-                  { label: 'Tâches terminées', value: selectedMember.taches_terminees || 0 },
-                  { label: 'Total tâches', value: selectedMember.total_taches || 0 },
-                ].map((info) => (
-                  <div key={info.label} style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px' }}>
-                    <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 4px 0' }}>{info.label}</p>
-                    <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{info.value}</p>
+                  { label: 'Rôle',             value: roleLabels[selectedMember.role] || selectedMember.role },
+                  { label: 'Département',       value: selectedMember.departement || 'Non défini' },
+                  { label: 'Statut',            value: getStatus(selectedMember.charge_actuelle).label },
+                  { label: 'Tâches actives',    value: selectedMember.charge_actuelle || 0 },
+                  { label: 'Tâches terminées',  value: selectedMember.taches_terminees || 0 },
+                  { label: 'Total tâches',      value: selectedMember.total_taches || 0 },
+                ].map(info => (
+                  <div key={info.label} style={{ background: T.slate50, borderRadius: 12, padding: 14, border: `1px solid ${T.slate100}` }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 11, color: T.slate400, fontWeight: 500 }}>{info.label}</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: T.slate900 }}>{info.value}</p>
                   </div>
                 ))}
               </div>
 
+              {/* Edit form (admin only) */}
               {isAdmin && (
-                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Modifier les informations</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <input type="text" placeholder="Nom complet" defaultValue={selectedMember.nom_complet} onChange={(e) => setEditForm({ ...editForm, nom_complet: e.target.value })} style={{ padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                    <input type="email" placeholder="Email" defaultValue={selectedMember.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} style={{ padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                    <input type="text" placeholder="Département" defaultValue={selectedMember.departement} onChange={(e) => setEditForm({ ...editForm, departement: e.target.value })} style={{ padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                    <select defaultValue={selectedMember.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })} style={{ padding: '10px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <div style={{ paddingTop: 20, borderTop: `1px solid ${T.slate100}` }}>
+                  <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 700, color: T.slate700 }}>Modifier les informations</p>
+                  {formError && (
+                    <div style={{ padding: '10px 14px', background: T.rose50, border: `1px solid ${T.roseMid}`, borderRadius: 8, color: T.rose, fontSize: 13, marginBottom: 12 }}>⚠️ {formError}</div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <input type="text"  placeholder="Nom complet"  defaultValue={selectedMember.nom_complet}  onChange={e => setEditForm({ ...editForm, nom_complet:  e.target.value })} style={inputSx} />
+                    <input type="email" placeholder="Email"         defaultValue={selectedMember.email}         onChange={e => setEditForm({ ...editForm, email:        e.target.value })} style={inputSx} />
+                    <input type="text"  placeholder="Département"   defaultValue={selectedMember.departement}   onChange={e => setEditForm({ ...editForm, departement:  e.target.value })} style={inputSx} />
+                    <select defaultValue={selectedMember.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })} style={inputSx}>
                       <option value="employe">Employé</option>
                       <option value="chef_projet">Chef de projet</option>
                       <option value="admin">Admin</option>
                     </select>
-                    <button onClick={handleUpdateMember} style={{ padding: '10px', background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Enregistrer</button>
+                    <button
+                      onClick={handleUpdateMember}
+                      style={{ padding: '11px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+                    >
+                      Enregistrer les modifications
+                    </button>
                   </div>
                 </div>
               )}
 
-              <button onClick={() => setSelectedMember(null)} style={{ width: '100%', marginTop: '20px', padding: '12px', background: '#f1f5f9', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 500, cursor: 'pointer' }}>
+              <button
+                onClick={() => setSelectedMember(null)}
+                style={{ width: '100%', marginTop: 16, padding: '11px', background: T.slate100, border: `1px solid ${T.slate200 ?? T.slate300}`, borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer', color: T.slate700 }}
+              >
                 Fermer
               </button>
             </div>
           </div>
         )}
 
-        {/* Modal Ajout Membre (Admin seulement) */}
+        {/* ── Add member modal ── */}
         {showModal && isAdmin && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => setShowModal(false)}>
-            <div style={{ background: '#fff', borderRadius: '24px', maxWidth: '480px', width: '100%', padding: '28px' }} onClick={(e) => e.stopPropagation()}>
-              <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '20px' }}>Ajouter un membre</h2>
-              {formError && <div style={{ padding: '10px', background: '#fee2e2', borderRadius: '8px', color: '#dc2626', fontSize: '13px', marginBottom: '16px' }}>⚠️ {formError}</div>}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <input type="text" placeholder="Nom complet" value={form.nom_complet} onChange={(e) => setForm({ ...form, nom_complet: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
-                <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
-                <input type="password" placeholder="Mot de passe" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
-                <input type="text" placeholder="Département" value={form.departement} onChange={(e) => setForm({ ...form, departement: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
-                <input type="text" placeholder="Téléphone" value={form.telephone} onChange={(e) => setForm({ ...form, telephone: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
-                <input type="text" placeholder="Poste" value={form.poste} onChange={(e) => setForm({ ...form, poste: e.target.value })} style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '10px' }} />
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+            onClick={() => setShowModal(false)}
+          >
+            <div
+              style={{ background: T.white, borderRadius: 24, maxWidth: 480, width: '100%', padding: 28, boxShadow: '0 24px 64px rgba(0,0,0,.2)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <h2 style={{ margin: '0 0 20px', fontSize: 19, fontWeight: 800, color: T.slate900 }}>Ajouter un membre</h2>
+
+              {formError && (
+                <div style={{ padding: '10px 14px', background: T.rose50, border: `1px solid ${T.roseMid}`, borderRadius: 8, color: T.rose, fontSize: 13, marginBottom: 16 }}>⚠️ {formError}</div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <input type="text"     placeholder="Nom complet"    value={form.nom_complet}  onChange={e => setForm({ ...form, nom_complet:  e.target.value })} style={inputSx} />
+                <input type="email"    placeholder="Email"           value={form.email}        onChange={e => setForm({ ...form, email:        e.target.value })} style={inputSx} />
+                <input type="password" placeholder="Mot de passe"    value={form.password}     onChange={e => setForm({ ...form, password:     e.target.value })} style={inputSx} />
+                <input type="text"     placeholder="Département"     value={form.departement}  onChange={e => setForm({ ...form, departement:  e.target.value })} style={inputSx} />
+                <input type="text"     placeholder="Téléphone"       value={form.telephone}    onChange={e => setForm({ ...form, telephone:    e.target.value })} style={inputSx} />
+                <input type="text"     placeholder="Poste"           value={form.poste}        onChange={e => setForm({ ...form, poste:        e.target.value })} style={inputSx} />
+
                 <div>
-                  <label style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', display: 'block' }}>Rôle</label>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    {[
-                      { value: 'employe', label: 'Employé' },
-                      { value: 'chef_projet', label: 'Chef de projet' },
-                    ].map((r) => (
-                      <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value })} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: `2px solid ${form.role === r.value ? '#1e3a8a' : '#e2e8f0'}`, background: form.role === r.value ? '#eff6ff' : '#fff', cursor: 'pointer' }}>{r.label}</button>
+                  <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: T.slate500, textTransform: 'uppercase', letterSpacing: '.7px' }}>Rôle</p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {(['employe', 'chef_projet'] as const).map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setForm({ ...form, role: r })}
+                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${form.role === r ? T.blue600 : T.slate300}`, background: form.role === r ? T.blue50 : T.white, color: form.role === r ? T.blue600 : T.slate700, fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: 'all .15s' }}
+                      >
+                        {r === 'employe' ? 'Employé' : 'Chef de projet'}
+                      </button>
                     ))}
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '12px', background: '#f1f5f9', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>Annuler</button>
-                <button onClick={handleCreateMember} style={{ flex: 1, padding: '12px', background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer' }}>Ajouter</button>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 22 }}>
+                <button
+                  onClick={() => setShowModal(false)}
+                  style={{ flex: 1, padding: '12px', background: T.slate100, border: `1px solid ${T.slate300}`, borderRadius: 10, cursor: 'pointer', color: T.slate700, fontWeight: 600, fontSize: 14 }}
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCreateMember}
+                  style={{ flex: 1, padding: '12px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, boxShadow: `0 4px 14px ${T.blue600}44` }}
+                >
+                  Ajouter
+                </button>
               </div>
             </div>
           </div>

@@ -184,7 +184,7 @@ export default function TasksList() {
       const response = await fetch(`${API_URL}/projets/taches/mes-taches`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+      console.log(response);
       const data = await response.json();
       
       if (data.success) {

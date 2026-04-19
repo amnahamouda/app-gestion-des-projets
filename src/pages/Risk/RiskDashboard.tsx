@@ -54,6 +54,26 @@ interface GlobalStats {
   termine: number;
 }
 
+// Design tokens corporate - ONLY SLATE SCALE
+const T = {
+  slate900: '#0f172a',
+  slate800: '#1e293b',
+  slate700: '#334155',
+  slate600: '#475569',
+  slate500: '#64748b',
+  slate400: '#94a3b8',
+  slate300: '#cbd5e1',
+  slate200: '#e2e8f0',
+  slate100: '#f1f5f9',
+  slate50: '#f8fafc',
+  white: '#ffffff',
+  blue600: '#2563eb',
+  blue500: '#3b82f6',
+  blue400: '#60a5fa',
+  blue100: '#dbeafe',
+  blue50: '#eff6ff',
+};
+
 export default function RiskAnalysis() {
   const { token, user, isChef } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -62,7 +82,6 @@ export default function RiskAnalysis() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [projects, setProjects] = useState<{ id: number; nom_projet: string }[]>([]);
   
-  // États pour les données
   const [tasksWithRisk, setTasksWithRisk] = useState<Task[]>([]);
   const [projectRisks, setProjectRisks] = useState<ProjectRisk[]>([]);
   const [employeeWorkload, setEmployeeWorkload] = useState<EmployeeWorkload[]>([]);
@@ -76,22 +95,17 @@ export default function RiskAnalysis() {
     termine: 0
   });
 
-  // Charger les projets du chef
   const fetchProjects = async () => {
     try {
-      console.log('🔍 Chargement des projets...');
       const response = await fetch(`${API_URL}/projets`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      console.log('📊 Projets reçus:', data);
       
       if (data.success) {
-        // Filtrer les projets du chef connecté
         const projetsChef = data.projets.filter(
-  (p: any) => Number(p.chef_projet_id) === Number(user?.id)
-);
-        console.log(`✅ ${projetsChef.length} projets trouvés pour chef ID: ${user?.id}`);
+          (p: any) => Number(p.chef_projet_id) === Number(user?.id)
+        );
         setProjects(projetsChef);
         if (projetsChef.length > 0 && !selectedProjectId) {
           setSelectedProjectId(projetsChef[0].id);
@@ -102,18 +116,14 @@ export default function RiskAnalysis() {
     }
   };
 
-  // Charger la classification des tâches par risque pour un projet
   const fetchTachesRisquees = async (projetId: number) => {
     try {
-      console.log(`🔍 Chargement tâches risquées pour projet ${projetId}...`);
       const response = await fetch(`${API_URL}/prediction/projet/${projetId}/taches-risquees`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      console.log('📊 Réponse tâches risquées:', data);
       
       if (data.success) {
-        // Transformer les données pour correspondre à l'interface
         const formattedTasks = (data.taches_classees || []).map((t: any) => ({
           id: t.id,
           titre: t.titre,
@@ -140,23 +150,18 @@ export default function RiskAnalysis() {
           normal: 0,
           termine: 0
         });
-      } else {
-        console.error('Erreur API:', data.message);
       }
     } catch (error) {
       console.error('Erreur chargement tâches risquées:', error);
     }
   };
 
-  // Charger l'analyse de charge pour un projet
   const fetchChargeTravail = async (projetId: number) => {
     try {
-      console.log(`🔍 Chargement charge travail pour projet ${projetId}...`);
       const response = await fetch(`${API_URL}/prediction/projet/${projetId}/charge`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      console.log('📊 Réponse charge travail:', data);
       
       if (data.success) {
         setEmployeeWorkload(data.analyse_charge || []);
@@ -166,18 +171,15 @@ export default function RiskAnalysis() {
     }
   };
 
-  // Charger l'analyse globale des risques pour tous les projets du chef
   const fetchAnalyseGlobaleProjets = async () => {
     try {
       const projetsRisques: ProjectRisk[] = [];
       
       for (const project of projects) {
-        console.log(`🔍 Analyse globale pour projet ${project.id}...`);
         const response = await fetch(`${API_URL}/prediction/projet/${project.id}/analyse-globale`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
-        console.log(`📊 Analyse projet ${project.id}:`, data);
         
         if (data.success) {
           projetsRisques.push({
@@ -201,7 +203,6 @@ export default function RiskAnalysis() {
     }
   };
 
-  // Charger toutes les données
   useEffect(() => {
     if (token && user && isChef) {
       const loadData = async () => {
@@ -215,7 +216,6 @@ export default function RiskAnalysis() {
     }
   }, [token, user, isChef]);
 
-  // Charger les données spécifiques au projet sélectionné
   useEffect(() => {
     if (selectedProjectId) {
       const loadProjectData = async () => {
@@ -228,31 +228,29 @@ export default function RiskAnalysis() {
     }
   }, [selectedProjectId]);
 
-  // Charger l'analyse globale après avoir les projets
   useEffect(() => {
     if (projects.length > 0) {
       fetchAnalyseGlobaleProjets();
     }
   }, [projects]);
 
-  // Fonction pour obtenir le niveau de risque
+  // Risk levels with GRADIENT OF SLATE (no red, orange, green)
   const getRiskLevel = (score: number, niveau?: string) => {
     if (niveau === 'critique' || score >= 70) {
-      return { label: 'Critique', color: '#991b1b', bg: '#fee2e2', icon: '🔴' };
+      return { label: 'Critique', color: T.slate900, bg: T.slate100, icon: '▪️' };
     }
     if (niveau === 'élevé' || score >= 50) {
-      return { label: 'Élevé', color: '#dc2626', bg: '#fee2e2', icon: '🟠' };
+      return { label: 'Élevé', color: T.slate700, bg: T.slate200, icon: '▫️' };
     }
     if (niveau === 'moyen' || score >= 30) {
-      return { label: 'Moyen', color: '#f59e0b', bg: '#fef9c3', icon: '🟡' };
+      return { label: 'Moyen', color: T.slate600, bg: T.slate300, icon: '◽' };
     }
     if (niveau === 'faible' || score > 0) {
-      return { label: 'Faible', color: '#16a34a', bg: '#dcfce7', icon: '🟢' };
+      return { label: 'Faible', color: T.slate500, bg: T.slate100, icon: '◻️' };
     }
-    return { label: 'Normal', color: '#475569', bg: '#f1f5f9', icon: '⚪' };
+    return { label: 'Normal', color: T.slate400, bg: T.slate50, icon: '□' };
   };
 
-  // Filtrage des tâches
   const filteredTasks = tasksWithRisk.filter((t) => {
     if (filterLevel === 'all') return true;
     if (filterLevel === 'critique') return t.niveau_risque === 'critique';
@@ -262,7 +260,6 @@ export default function RiskAnalysis() {
     return true;
   });
 
-  // Tri des tâches
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     if (sortBy === 'score') return (b.score_risque || 0) - (a.score_risque || 0);
     if (sortBy === 'deadline') return (a.jours_restants || 0) - (b.jours_restants || 0);
@@ -283,7 +280,7 @@ export default function RiskAnalysis() {
     return (
       <div style={{ textAlign: 'center', padding: '4rem' }}>
         <p>⛔ Accès réservé aux chefs de projet</p>
-        <Link to="/dashboard" style={{ color: '#1e40af' }}>Retour au dashboard</Link>
+        <Link to="/dashboard" style={{ color: T.blue600 }}>Retour au dashboard</Link>
       </div>
     );
   }
@@ -295,24 +292,22 @@ export default function RiskAnalysis() {
 
       <div style={{ fontFamily: "'Outfit', sans-serif", display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-        {/* Header */}
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0 0 4px 0' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: T.slate900, margin: '0 0 4px 0' }}>
             🔍 Module de prédiction de risque
           </h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>
+          <p style={{ color: T.slate500, fontSize: '0.875rem', margin: 0 }}>
             Analyse automatique des risques de retard — Score = ((100 - %avancement) × 100) / jours restants
           </p>
         </div>
 
-        {/* Sélecteur de projet */}
         {projects.length > 0 ? (
-          <div style={{ background: '#fff', borderRadius: '16px', padding: '16px 20px', border: '1px solid #e2e8f0' }}>
-            <label style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginRight: '12px' }}>Projet :</label>
+          <div style={{ background: T.white, borderRadius: '16px', padding: '16px 20px', border: `1px solid ${T.slate200}` }}>
+            <label style={{ fontSize: '13px', fontWeight: 600, color: T.slate700, marginRight: '12px' }}>Projet :</label>
             <select
               value={selectedProjectId || ''}
               onChange={(e) => setSelectedProjectId(Number(e.target.value))}
-              style={{ padding: '8px 16px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: '#fff', cursor: 'pointer', minWidth: '200px' }}
+              style={{ padding: '8px 16px', border: `1.5px solid ${T.slate200}`, borderRadius: '10px', fontSize: '14px', outline: 'none', background: T.white, cursor: 'pointer', minWidth: '200px' }}
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.nom_projet}</option>
@@ -320,7 +315,7 @@ export default function RiskAnalysis() {
             </select>
           </div>
         ) : (
-          <div style={{ background: '#fee2e2', borderRadius: '16px', padding: '20px', textAlign: 'center', color: '#991b1b' }}>
+          <div style={{ background: T.slate100, borderRadius: '16px', padding: '20px', textAlign: 'center', color: T.slate700 }}>
             <p>⚠️ Aucun projet trouvé pour ce chef de projet</p>
             <p style={{ fontSize: '12px', marginTop: '8px' }}>
               Vérifiez que vous avez des projets avec chef_projet_id = {user?.id}
@@ -328,15 +323,15 @@ export default function RiskAnalysis() {
           </div>
         )}
 
-        {/* KPIs risque */}
+        {/* KPIs - ALL SLATE */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
           {[
-            { label: 'Risque critique', value: globalStats.critique, icon: '🔴', bg: '#fff5f5', color: '#991b1b', border: '#fecaca' },
-            { label: 'Risque élevé', value: globalStats.eleve, icon: '🟠', bg: '#fff5f5', color: '#dc2626', border: '#fecaca' },
-            { label: 'Risque moyen', value: globalStats.moyen, icon: '🟡', bg: '#fffbeb', color: '#f59e0b', border: '#fde68a' },
-            { label: 'Risque faible', value: globalStats.faible, icon: '🟢', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-            { label: 'Employés surchargés', value: employeeWorkload.filter(e => e.charge >= 5).length, icon: '⚠️', bg: '#fff7ed', color: '#9a3412', border: '#fed7aa' },
-            { label: 'Total tâches', value: globalStats.total_taches, icon: '📋', bg: '#eff6ff', color: '#1e40af', border: '#dbeafe' },
+            { label: 'Risque critique', value: globalStats.critique, icon: '▪️', bg: T.slate100, color: T.slate900, border: T.slate300 },
+            { label: 'Risque élevé', value: globalStats.eleve, icon: '▫️', bg: T.slate100, color: T.slate800, border: T.slate300 },
+            { label: 'Risque moyen', value: globalStats.moyen, icon: '◽', bg: T.slate50, color: T.slate700, border: T.slate200 },
+            { label: 'Risque faible', value: globalStats.faible, icon: '◻️', bg: T.slate50, color: T.slate600, border: T.slate200 },
+            { label: 'Employés surchargés', value: employeeWorkload.filter(e => e.charge >= 5).length, icon: '⚠️', bg: T.blue50, color: T.blue600, border: T.blue100 },
+            { label: 'Total tâches', value: globalStats.total_taches, icon: '📋', bg: T.slate50, color: T.slate700, border: T.slate200 },
           ].map((s) => (
             <div key={s.label} style={{ background: s.bg, borderRadius: '16px', padding: '16px', border: `1.5px solid ${s.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -348,48 +343,48 @@ export default function RiskAnalysis() {
           ))}
         </div>
 
-        {/* Analyse par projet */}
+        {/* Project risk analysis */}
         {projectRisks.length > 0 && (
-          <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
-              <h2 style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: '15px' }}>📁 Analyse du risque par projet</h2>
+          <div style={{ background: T.white, borderRadius: '16px', border: `1px solid ${T.slate200}`, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.slate100}` }}>
+              <h2 style={{ fontWeight: 600, color: T.slate900, margin: 0, fontSize: '15px' }}>📁 Analyse du risque par projet</h2>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                 <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <tr style={{ background: T.slate50, borderBottom: `1px solid ${T.slate200}` }}>
                     {['Projet', 'Avancement', 'Jours restants', 'Score risque', 'Niveau', 'Statut'].map((h) => (
-                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>{h}</th>
+                      <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: T.slate600, fontSize: '13px' }}>{h}</th>
                     ))}
-                   </tr>
+                  </tr>
                 </thead>
                 <tbody>
                   {projectRisks.map((p) => {
                     const risk = getRiskLevel(p.score_risque_moyen, p.niveau_risque);
                     return (
-                      <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                      <tr key={p.id} style={{ borderBottom: `1px solid ${T.slate100}` }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = T.slate50)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = T.white)}
                       >
                         <td style={{ padding: '14px 16px' }}>
-                          <Link to={`/projects/${p.id}`} style={{ fontWeight: 600, color: '#0f172a', textDecoration: 'none' }}>{p.nom_projet}</Link>
+                          <Link to={`/projects/${p.id}`} style={{ fontWeight: 600, color: T.slate900, textDecoration: 'none' }}>{p.nom_projet}</Link>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '80px', height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${p.avancement}%`, background: p.avancement === 100 ? '#16a34a' : '#1d4ed8', borderRadius: '999px' }} />
+                            <div style={{ width: '80px', height: '6px', background: T.slate100, borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${p.avancement}%`, background: T.blue600, borderRadius: '999px' }} />
                             </div>
-                            <span style={{ fontSize: '12px', color: '#64748b' }}>{p.avancement}%</span>
+                            <span style={{ fontSize: '12px', color: T.slate500 }}>{p.avancement}%</span>
                           </div>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
-                          <span style={{ fontSize: '13px', color: p.jours_restants <= 7 ? '#ef4444' : '#475569', fontWeight: p.jours_restants <= 7 ? 700 : 400 }}>
+                          <span style={{ fontSize: '13px', color: p.jours_restants <= 7 ? T.slate700 : T.slate500, fontWeight: p.jours_restants <= 7 ? 700 : 400 }}>
                             {p.jours_restants <= 0 ? '⚠️ Dépassé' : `${p.jours_restants}j`}
                           </span>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                            <div style={{ width: '60px', height: '6px', background: T.slate100, borderRadius: '999px', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${p.score_risque_moyen}%`, background: risk.color, borderRadius: '999px' }} />
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 700, color: risk.color }}>{p.score_risque_moyen}%</span>
@@ -401,10 +396,11 @@ export default function RiskAnalysis() {
                           </span>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
-                          {p.niveau_risque === 'critique' && <span style={{ color: '#ef4444' }}>🔴 Action urgente</span>}
-                          {p.niveau_risque === 'élevé' && <span style={{ color: '#f97316' }}>🟠 À surveiller</span>}
-                          {p.niveau_risque === 'moyen' && <span style={{ color: '#f59e0b' }}>🟡 Surveillance</span>}
-                          {p.niveau_risque === 'faible' && <span style={{ color: '#16a34a' }}>🟢 Normal</span>}
+                          <span style={{ color: risk.color }}>
+                            {risk.label === 'Critique' ? '▪️ Action urgente' : 
+                             risk.label === 'Élevé' ? '▫️ À surveiller' : 
+                             risk.label === 'Moyen' ? '◽ Surveillance' : '◻️ Normal'}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -415,29 +411,29 @@ export default function RiskAnalysis() {
           </div>
         )}
 
-        {/* Charge de travail */}
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <h2 style={{ fontWeight: 600, color: '#0f172a', margin: '0 0 16px 0', fontSize: '15px' }}>👥 Analyse de la charge de travail</h2>
+        {/* Workload */}
+        <div style={{ background: T.white, borderRadius: '16px', border: `1px solid ${T.slate200}`, padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <h2 style={{ fontWeight: 600, color: T.slate900, margin: '0 0 16px 0', fontSize: '15px' }}>👥 Analyse de la charge de travail</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
             {employeeWorkload.length === 0 ? (
-              <p style={{ color: '#94a3b8', textAlign: 'center', padding: '20px' }}>Aucun employé assigné à ce projet</p>
+              <p style={{ color: T.slate400, textAlign: 'center', padding: '20px' }}>Aucun employé assigné à ce projet</p>
             ) : (
               employeeWorkload.map((e) => {
                 const overloaded = e.charge >= 5;
                 const loadPercent = Math.min((e.charge / 7) * 100, 100);
                 return (
-                  <div key={e.id} style={{ padding: '14px', borderRadius: '12px', border: `1.5px solid ${overloaded ? '#fecaca' : '#e2e8f0'}`, background: overloaded ? '#fff5f5' : '#f8fafc' }}>
+                  <div key={e.id} style={{ padding: '14px', borderRadius: '12px', border: `1.5px solid ${overloaded ? T.slate300 : T.slate200}`, background: overloaded ? T.slate100 : T.slate50 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <p style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: '13px' }}>{e.nom}</p>
-                      {overloaded && <span style={{ fontSize: '11px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px', background: '#fee2e2', color: '#991b1b' }}>Surchargé</span>}
+                      <p style={{ fontWeight: 600, color: T.slate900, margin: 0, fontSize: '13px' }}>{e.nom}</p>
+                      {overloaded && <span style={{ fontSize: '11px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px', background: T.slate200, color: T.slate700 }}>Surchargé</span>}
                     </div>
-                    <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 6px 0' }}>
-                      Charge : <strong style={{ color: overloaded ? '#ef4444' : '#0f172a' }}>{e.charge}</strong> tâches non terminées
+                    <p style={{ fontSize: '12px', color: T.slate500, margin: '0 0 6px 0' }}>
+                      Charge : <strong style={{ color: overloaded ? T.slate700 : T.slate900 }}>{e.charge}</strong> tâches non terminées
                     </p>
-                    <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${loadPercent}%`, background: overloaded ? '#ef4444' : '#1d4ed8', borderRadius: '999px', transition: 'width 0.3s' }} />
+                    <div style={{ height: '6px', background: T.slate200, borderRadius: '999px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${loadPercent}%`, background: overloaded ? T.slate600 : T.blue600, borderRadius: '999px', transition: 'width 0.3s' }} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '10px', color: '#94a3b8' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '10px', color: T.slate400 }}>
                       <span>{e.taches_actives} actives</span>
                       <span>{e.taches_terminees} terminées</span>
                     </div>
@@ -448,26 +444,26 @@ export default function RiskAnalysis() {
           </div>
         </div>
 
-        {/* Classification des tâches par risque */}
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '12px' }}>
-            <h2 style={{ fontWeight: 600, color: '#0f172a', margin: 0, fontSize: '15px' }}>📋 Classification des tâches par niveau de risque</h2>
+        {/* Tasks classification */}
+        <div style={{ background: T.white, borderRadius: '16px', border: `1px solid ${T.slate200}`, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${T.slate100}`, flexWrap: 'wrap', gap: '12px' }}>
+            <h2 style={{ fontWeight: 600, color: T.slate900, margin: 0, fontSize: '15px' }}>📋 Classification des tâches par niveau de risque</h2>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <select
                 value={filterLevel}
                 onChange={(e) => setFilterLevel(e.target.value)}
-                style={{ padding: '6px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer' }}
+                style={{ padding: '6px 12px', border: `1.5px solid ${T.slate200}`, borderRadius: '8px', fontSize: '13px', outline: 'none', background: T.white, cursor: 'pointer' }}
               >
                 <option value="all">Tous niveaux</option>
-                <option value="critique">🔴 Critique</option>
-                <option value="eleve">🟠 Élevé</option>
-                <option value="moyen">🟡 Moyen</option>
-                <option value="faible">🟢 Faible</option>
+                <option value="critique">▪️ Critique</option>
+                <option value="eleve">▫️ Élevé</option>
+                <option value="moyen">◽ Moyen</option>
+                <option value="faible">◻️ Faible</option>
               </select>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'score' | 'deadline' | 'progress')}
-                style={{ padding: '6px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer' }}
+                style={{ padding: '6px 12px', border: `1.5px solid ${T.slate200}`, borderRadius: '8px', fontSize: '13px', outline: 'none', background: T.white, cursor: 'pointer' }}
               >
                 <option value="score">Trier par score</option>
                 <option value="deadline">Trier par deadline</option>
@@ -479,16 +475,16 @@ export default function RiskAnalysis() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <tr style={{ background: T.slate50, borderBottom: `1px solid ${T.slate200}` }}>
                   {['Tâche', 'Assigné à', 'Avancement', 'Jours restants', 'Score risque', 'Niveau', 'Cause'].map((h) => (
-                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>{h}</th>
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: T.slate600, fontSize: '13px' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {sortedTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: T.slate400 }}>
                       ✅ Aucune tâche à risque dans ce projet
                     </td>
                   </tr>
@@ -496,31 +492,31 @@ export default function RiskAnalysis() {
                   sortedTasks.map((t) => {
                     const risk = getRiskLevel(t.score_risque || 0, t.niveau_risque);
                     return (
-                      <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9', borderLeft: `4px solid ${risk.color}` }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                      <tr key={t.id} style={{ borderBottom: `1px solid ${T.slate100}`, borderLeft: `4px solid ${risk.color}` }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = T.slate50)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = T.white)}
                       >
                         <td style={{ padding: '14px 16px' }}>
-                          <p style={{ fontWeight: 600, color: '#0f172a', margin: 0 }}>{t.titre}</p>
-                          <p style={{ color: '#94a3b8', fontSize: '11px', margin: '2px 0 0 0' }}>{t.projet_nom}</p>
+                          <p style={{ fontWeight: 600, color: T.slate900, margin: 0 }}>{t.titre}</p>
+                          <p style={{ color: T.slate400, fontSize: '11px', margin: '2px 0 0 0' }}>{t.projet_nom}</p>
                         </td>
-                        <td style={{ padding: '14px 16px', color: '#475569' }}>{t.assigne_nom || 'Non assigné'}</td>
+                        <td style={{ padding: '14px 16px', color: T.slate600 }}>{t.assigne_nom || 'Non assigné'}</td>
                         <td style={{ padding: '14px 16px', minWidth: '100px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${t.progression}%`, background: t.progression === 100 ? '#16a34a' : '#1d4ed8', borderRadius: '999px' }} />
+                            <div style={{ width: '60px', height: '6px', background: T.slate100, borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${t.progression}%`, background: T.blue600, borderRadius: '999px' }} />
                             </div>
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{t.progression}%</span>
+                            <span style={{ fontSize: '12px', color: T.slate400 }}>{t.progression}%</span>
                           </div>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
-                          <span style={{ fontSize: '13px', color: (t.jours_restants || 0) <= 3 ? '#ef4444' : (t.jours_restants || 0) <= 7 ? '#f59e0b' : '#475569', fontWeight: (t.jours_restants || 0) <= 7 ? 700 : 400 }}>
+                          <span style={{ fontSize: '13px', color: (t.jours_restants || 0) <= 3 ? T.slate700 : (t.jours_restants || 0) <= 7 ? T.slate600 : T.slate500, fontWeight: (t.jours_restants || 0) <= 7 ? 700 : 400 }}>
                             {(t.jours_restants || 0) <= 0 ? '⚠️ En retard' : `${t.jours_restants}j`}
                           </span>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ width: '50px', height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                            <div style={{ width: '50px', height: '6px', background: T.slate100, borderRadius: '999px', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${t.score_risque || 0}%`, background: risk.color, borderRadius: '999px' }} />
                             </div>
                             <span style={{ fontSize: '12px', fontWeight: 700, color: risk.color }}>{t.score_risque || 0}%</span>
@@ -532,7 +528,7 @@ export default function RiskAnalysis() {
                           </span>
                         </td>
                         <td style={{ padding: '14px 16px', maxWidth: '200px' }}>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>
+                          <span style={{ fontSize: '11px', color: T.slate500 }}>
                             {t.cause_risque || 'En cours d\'analyse'}
                           </span>
                         </td>
