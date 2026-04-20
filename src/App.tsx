@@ -20,8 +20,6 @@ import Calendar from './pages/Calendar';
 import UserProfiles from './pages/UserProfiles';
 import RiskAnalysis from './pages/Risk/RiskDashboard';
 import TeamPage from './pages/Team/TeamPage';
-
-// ✅ Ajoute l'import du Chatbot
 import Chatbot from './components/Chatbot/Chatbot';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
