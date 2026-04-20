@@ -3,6 +3,12 @@ import { Link, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '../../context/AuthContext';
 
 // ===================== INTERFACES =====================
+interface SubTask {
+  id: number;
+  titre: string;
+  termine: boolean;
+}
+
 interface Comment {
   id: number;
   user_id: number;
@@ -37,637 +43,442 @@ interface Task {
   alerte?: string;
   commentaires?: Comment[];
   analyse_avancement?: AnalyseAvancement;
+  subtasks?: SubTask[];
 }
 
-interface Project {
-  id: number;
-  nom_projet: string;
-}
-
-interface User {
-  id: number;
-  nom_complet: string;
-  email: string;
-  role: string;
-}
+interface Project { id: number; nom_projet: string; }
+interface User { id: number; nom_complet: string; email: string; role: string; }
 
 const API_URL = 'http://localhost:5000/api';
 
-// Couleurs
-const statusColor: Record<string, { bg: string; color: string }> = {
-  'a_faire': { bg: '#f1f5f9', color: '#475569' },
-  'en_cours': { bg: '#dbeafe', color: '#1e40af' },
-  'termine': { bg: '#dcfce7', color: '#166534' },
+// ── Design tokens ────────────────────────────────────────
+const T = {
+  navy950: '#0c1a3a', navy900: '#0f2057',
+  blue600: '#1e40af', blue400: '#60a5fa', blue100: '#dbeafe', blue50: '#eff6ff',
+  slate900: '#0f172a', slate700: '#334155', slate600: '#475569',
+  slate500: '#64748b', slate400: '#94a3b8', slate300: '#cbd5e1',
+  slate100: '#f1f5f9', slate50: '#f8fafc', white: '#ffffff',
+  rose: '#e11d48', rose50: '#fff1f2', roseMid: '#fecdd3',
+  amber: '#b45309', amber50: '#fffbeb', amberMid: '#fde68a',
+  green: '#15803d', green50: '#f0fdf4', greenMid: '#bbf7d0',
 };
 
-const priorityColor: Record<string, { bg: string; color: string }> = {
-  'haute': { bg: '#fee2e2', color: '#991b1b' },
-  'moyenne': { bg: '#fef9c3', color: '#854d0e' },
-  'faible': { bg: '#dcfce7', color: '#166534' },
+const statusStyle: Record<string, { bg: string; color: string }> = {
+  a_faire:  { bg: T.slate100, color: T.slate600 },
+  en_cours: { bg: T.blue50,   color: T.blue600  },
+  termine:  { bg: T.green50,  color: T.green    },
 };
 
-// Traductions
-const traduireStatut = (statut: string): string => {
-  const map: Record<string, string> = {
-    'a_faire': 'À faire',
-    'en_cours': 'En cours',
-    'termine': 'Terminé'
-  };
-  return map[statut] || statut;
+const priorityStyle: Record<string, { bg: string; color: string }> = {
+  haute:   { bg: T.rose50,  color: T.rose  },
+  moyenne: { bg: T.amber50, color: T.amber },
+  faible:  { bg: T.green50, color: T.green },
 };
 
-const traduirePriorite = (priorite: string): string => {
-  const map: Record<string, string> = {
-    'haute': 'Haute',
-    'moyenne': 'Moyenne',
-    'faible': 'Basse'
-  };
-  return map[priorite] || priorite;
+const traduireStatut   = (s: string) => ({ a_faire: 'À faire', en_cours: 'En cours', termine: 'Terminé' }[s] || s);
+const traduirePriorite = (p: string) => ({ haute: 'Haute', moyenne: 'Moyenne', faible: 'Basse' }[p] || p);
+
+const formatDateForBackend = (d: string): string | null => {
+  if (!d) return null;
+  if (d.match(/^\d{4}-\d{2}-\d{2}$/)) return d;
+  return new Date(d).toISOString().split('T')[0];
 };
 
-const inputStyle: React.CSSProperties = {
+const inputSx: React.CSSProperties = {
   width: '100%', padding: '10px 14px',
-  border: '1.5px solid #e2e8f0', borderRadius: '10px',
-  fontSize: '14px', color: '#0f172a',
-  background: '#f8fafc', outline: 'none', boxSizing: 'border-box',
+  border: `1px solid ${T.slate300}`, borderRadius: '10px',
+  fontSize: '14px', color: T.slate900,
+  background: T.white, outline: 'none', boxSizing: 'border-box',
 };
 
-const formatDateForBackend = (dateString: string): string | null => {
-  if (!dateString) return null;
-  if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) return dateString;
-  return new Date(dateString).toISOString().split('T')[0];
+// ── Subtask storage (localStorage per task) ──────────────
+const STORAGE_KEY = (taskId: number) => `subtasks_task_${taskId}`;
+const loadSubtasks = (taskId: number): SubTask[] => {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY(taskId)) || '[]'); }
+  catch { return []; }
+};
+const saveSubtasks = (taskId: number, subtasks: SubTask[]) => {
+  localStorage.setItem(STORAGE_KEY(taskId), JSON.stringify(subtasks));
+};
+const calcProgression = (subtasks: SubTask[]): number => {
+  if (subtasks.length === 0) return 0;
+  return Math.round((subtasks.filter(s => s.termine).length / subtasks.length) * 100);
 };
 
+// ===================== COMPONENT =====================
 export default function TasksList() {
   const { isChef, token, user } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-  
-  // Récupérer l'ID de la tâche à mettre en évidence depuis l'URL
   const searchParams = new URLSearchParams(location.search);
   const highlightTaskId = searchParams.get('highlight');
-  
-  // ===================== ÉTATS PRINCIPAUX =====================
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+
+  const [tasks, setTasks]         = useState<Task[]>([]);
+  const [projects, setProjects]   = useState<Project[]>([]);
   const [usersList, setUsersList] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  
-  // États pour la mise en évidence
   const [highlightedTask, setHighlightedTask] = useState<number | null>(null);
   const highlightedRowRef = useRef<HTMLTableRowElement>(null);
-  
-  // ===================== ÉTATS MODAL CRÉATION =====================
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [form, setForm] = useState({
-    titre: '',
-    description: '',
-    projet_id: '',
-    assigne_a: '',
-    priorite: 'moyenne',
-    date_debut: '',
-    date_echeance: ''
-  });
-  const [formError, setFormError] = useState('');
-  const [formLoading, setFormLoading] = useState(false);
-  
-  // ===================== ÉTATS MODAL DÉTAIL =====================
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [newComment, setNewComment] = useState('');
-  
-  // ===================== ÉTATS POUR LA MODIFICATION TEMPORAIRE =====================
-  const [tempStatut, setTempStatut] = useState<string>('');
-  const [tempProgression, setTempProgression] = useState<number>(0);
-  const [saving, setSaving] = useState(false);
-  
-  // ===================== ÉTATS MODAL MODIFICATION TÂCHE =====================
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState<Task | null>(null);
-  const [editError, setEditError] = useState('');
-  const [editLoading, setEditLoading] = useState(false);
-  
-  // ===================== ÉTATS MODAL MODIFICATION COMMENTAIRE =====================
-  const [showEditCommentModal, setShowEditCommentModal] = useState(false);
-  const [editingComment, setEditingComment] = useState<Comment | null>(null);
-  const [editCommentText, setEditCommentText] = useState('');
 
-  useEffect(() => {
-    if (highlightTaskId && tasks.length > 0) {
-      const taskId = Number(highlightTaskId);
-      setHighlightedTask(taskId);
-      
-      // Faire défiler jusqu'à la tâche après un petit délai
-      setTimeout(() => {
-        if (highlightedRowRef.current) {
-          highlightedRowRef.current.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-      }, 100);
-      
-      // Enlever le paramètre de l'URL après 5 secondes
-      setTimeout(() => {
-        setHighlightedTask(null);
-        window.history.replaceState({}, '', '/tasks');
-      }, 5000);
-    }
-  }, [highlightTaskId, tasks]);
-  
-  // ===================== CHARGER LES TÂCHES =====================
+  // Modal états
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showEditModal, setShowEditModal]     = useState(false);
+  const [showEditCommentModal, setShowEditCommentModal] = useState(false);
+  const [selectedTask, setSelectedTask]       = useState<Task | null>(null);
+  const [formError, setFormError]             = useState('');
+  const [formLoading, setFormLoading]         = useState(false);
+  const [editError, setEditError]             = useState('');
+  const [editLoading, setEditLoading]         = useState(false);
+  const [saving, setSaving]                   = useState(false);
+  const [newComment, setNewComment]           = useState('');
+  const [editingComment, setEditingComment]   = useState<Comment | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  const [tempStatut, setTempStatut]           = useState('');
+  const [tempProgression, setTempProgression] = useState(0);
+  const [editForm, setEditForm]               = useState<Task | null>(null);
+  const [form, setForm] = useState({
+    titre: '', description: '', projet_id: '', assigne_a: '',
+    priorite: 'moyenne', date_debut: '', date_echeance: '',
+  });
+
+  // ── Subtasks state ────────────────────────────────────
+  const [subtasks, setSubtasks]         = useState<SubTask[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+
+  // ── Fetch ─────────────────────────────────────────────
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/projets/taches/mes-taches`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      console.log(response);
-      const data = await response.json();
-      
-      if (data.success) {
-        setTasks(data.taches);
-      }
-    } catch (error) {
-      console.error('Erreur chargement tâches:', error);
-    } finally {
-      setLoading(false);
-    }
+      const r = await fetch(`${API_URL}/projets/taches/mes-taches`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) setTasks(d.taches);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // ===================== CHARGER LES PROJETS =====================
   const fetchProjects = async () => {
     try {
-      const response = await fetch(`${API_URL}/projets`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setProjects(data.projets);
-      }
-    } catch (error) {
-      console.error('Erreur chargement projets:', error);
-    }
+      const r = await fetch(`${API_URL}/projets`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) setProjects(d.projets);
+    } catch (e) { console.error(e); }
   };
 
-  // ===================== CHARGER LES UTILISATEURS =====================
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (data.users) {
-        setUsersList(data.users);
-      }
-    } catch (error) {
-      console.error('Erreur chargement utilisateurs:', error);
-    }
+      const r = await fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.users) setUsersList(d.users);
+    } catch (e) { console.error(e); }
   };
 
   useEffect(() => {
-    if (token) {
-      fetchTasks();
-      fetchProjects();
-      fetchUsers();
-    }
+    if (token) { fetchTasks(); fetchProjects(); fetchUsers(); }
   }, [token]);
 
-  // ===================== CRÉER UNE TÂCHE =====================
+  useEffect(() => {
+    if (highlightTaskId && tasks.length > 0) {
+      const id = Number(highlightTaskId);
+      setHighlightedTask(id);
+      setTimeout(() => { highlightedRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+      setTimeout(() => { setHighlightedTask(null); window.history.replaceState({}, '', '/tasks'); }, 5000);
+    }
+  }, [highlightTaskId, tasks]);
+
+  // ── Subtask helpers ───────────────────────────────────
+  const loadTaskSubtasks = (taskId: number) => {
+    const loaded = loadSubtasks(taskId);
+    setSubtasks(loaded);
+    // Sync avancement avec subtasks si subtasks existent
+    if (loaded.length > 0) {
+      const prog = calcProgression(loaded);
+      setTempProgression(prog);
+      setTempStatut(prog === 100 ? 'termine' : prog > 0 ? 'en_cours' : 'a_faire');
+    }
+  };
+
+  const addSubtask = () => {
+    if (!newSubtaskTitle.trim() || !selectedTask) return;
+    const newSt: SubTask = { id: Date.now(), titre: newSubtaskTitle.trim(), termine: false };
+    const updated = [...subtasks, newSt];
+    setSubtasks(updated);
+    saveSubtasks(selectedTask.id, updated);
+    setNewSubtaskTitle('');
+    syncProgressionFromSubtasks(updated);
+  };
+
+  const toggleSubtask = (id: number) => {
+    if (!selectedTask) return;
+    const updated = subtasks.map(s => s.id === id ? { ...s, termine: !s.termine } : s);
+    setSubtasks(updated);
+    saveSubtasks(selectedTask.id, updated);
+    syncProgressionFromSubtasks(updated);
+  };
+
+  const deleteSubtask = (id: number) => {
+    if (!selectedTask) return;
+    const updated = subtasks.filter(s => s.id !== id);
+    setSubtasks(updated);
+    saveSubtasks(selectedTask.id, updated);
+    syncProgressionFromSubtasks(updated);
+  };
+
+  const syncProgressionFromSubtasks = (subs: SubTask[]) => {
+    if (subs.length === 0) return;
+    const prog = calcProgression(subs);
+    setTempProgression(prog);
+    setTempStatut(prog === 100 ? 'termine' : prog > 0 ? 'en_cours' : 'a_faire');
+  };
+
+  // ── CRUD tasks ────────────────────────────────────────
   const handleCreateTask = async () => {
     if (!form.titre || !form.projet_id || !form.assigne_a || !form.date_echeance) {
-      setFormError('Titre, projet, assigné et date d\'échéance sont obligatoires.');
-      return;
+      setFormError("Titre, projet, assigné et date d'échéance sont obligatoires."); return;
     }
-
-    setFormLoading(true);
-    setFormError('');
-
+    setFormLoading(true); setFormError('');
     try {
-      const response = await fetch(`${API_URL}/projets/${form.projet_id}/taches`, {
+      const r = await fetch(`${API_URL}/projets/${form.projet_id}/taches`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projet_id: parseInt(form.projet_id),
-          titre: form.titre,
-          description: form.description,
-          assigne_a: parseInt(form.assigne_a),
-          priorite: form.priorite,
-          date_debut: formatDateForBackend(form.date_debut),
-          date_echeance: formatDateForBackend(form.date_echeance)
+          projet_id: parseInt(form.projet_id), titre: form.titre, description: form.description,
+          assigne_a: parseInt(form.assigne_a), priorite: form.priorite,
+          date_debut: formatDateForBackend(form.date_debut), date_echeance: formatDateForBackend(form.date_echeance),
         }),
       });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      const d = await r.json();
+      if (r.ok && d.success) {
         setShowCreateModal(false);
-        setForm({
-          titre: '',
-          description: '',
-          projet_id: '',
-          assigne_a: '',
-          priorite: 'moyenne',
-          date_debut: '',
-          date_echeance: ''
-        });
+        setForm({ titre: '', description: '', projet_id: '', assigne_a: '', priorite: 'moyenne', date_debut: '', date_echeance: '' });
         fetchTasks();
-      } else {
-        setFormError(data.message || 'Erreur lors de la création');
-      }
-    } catch (error) {
-      console.error('Erreur création:', error);
-      setFormError('Erreur de connexion');
-    } finally {
-      setFormLoading(false);
-    }
+      } else { setFormError(d.message || 'Erreur lors de la création'); }
+    } catch (e) { setFormError('Erreur de connexion'); } finally { setFormLoading(false); }
   };
 
-  // ===================== SUPPRIMER UNE TÂCHE =====================
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Confirmer la suppression de cette tâche ?')) return;
-    
+    if (!window.confirm('Confirmer la suppression ?')) return;
     try {
-      const response = await fetch(`${API_URL}/projets/taches/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        fetchTasks();
-        if (selectedTask?.id === id) setShowDetailModal(false);
-      } else {
-        alert(data.message || 'Erreur lors de la suppression');
-      }
-    } catch (error) {
-      console.error('Erreur suppression:', error);
-      alert('Erreur de connexion');
-    }
+      const r = await fetch(`${API_URL}/projets/taches/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (r.ok && d.success) { fetchTasks(); if (selectedTask?.id === id) setShowDetailModal(false); }
+      else { alert(d.message || 'Erreur suppression'); }
+    } catch (e) { alert('Erreur de connexion'); }
   };
 
-  // ===================== METTRE À JOUR LE STATUT =====================
   const handleStatusChange = async (taskId: number, newStatut: string) => {
-    console.log("🔄 Tentative de changement statut - Tâche:", taskId, "Nouveau statut:", newStatut);
-    
-    // ✅ Déterminer la progression automatique selon le statut
-    let newProgression = 0;
-    if (newStatut === 'termine') {
-      newProgression = 100;
-    } else if (newStatut === 'en_cours') {
-      newProgression = 25;
-    } else if (newStatut === 'a_faire') {
-      newProgression = 0;
-    }
-    
+    const prog = newStatut === 'termine' ? 100 : newStatut === 'en_cours' ? 25 : 0;
     try {
-      // Mettre à jour le statut
-      const response = await fetch(`${API_URL}/projets/taches/${taskId}/status`, {
+      const r = await fetch(`${API_URL}/projets/taches/${taskId}/status`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ statut: newStatut, progression: newProgression })
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: newStatut, progression: prog }),
       });
-
-      const data = await response.json();
-      console.log("📡 Réponse backend:", data);
-      
-      if (response.ok && data.success) {
-        console.log("✅ Statut modifié avec succès");
-        fetchTasks(); // Recharger la liste
-        if (selectedTask?.id === taskId) {
-          setSelectedTask(prev => prev ? { ...prev, statut: newStatut, progression: newProgression } : prev);
-          setTempStatut(newStatut);
-          setTempProgression(newProgression);
-        }
-      } else {
-        console.log("❌ Erreur:", data.message);
-        alert(data.message || 'Erreur lors de la modification');
-      }
-    } catch (error) {
-      console.error('Erreur mise à jour statut:', error);
-      alert('Erreur de connexion');
-    }
+      const d = await r.json();
+      if (r.ok && d.success) {
+        fetchTasks();
+        if (selectedTask?.id === taskId) { setTempStatut(newStatut); setTempProgression(prog); }
+      } else { alert(d.message || 'Erreur'); }
+    } catch (e) { alert('Erreur de connexion'); }
   };
 
-  // ===================== SAUVEGARDER L'AVANCEMENT (CALCUL AUTOMATIQUE) =====================
   const handleSaveChanges = async () => {
     if (!selectedTask) return;
-    
     setSaving(true);
-    
     try {
-      // ✅ Calculer le nouveau statut basé sur la progression
-      let newStatut = selectedTask.statut;
-      let message = "";
-      
-      if (tempProgression === 100) {
-        newStatut = 'termine';
-        message = "🎉 Tâche terminée !";
-      } else if (tempProgression > 0 && tempProgression < 100) {
-        newStatut = 'en_cours';
-        message = `📝 En cours (${tempProgression}%)`;
-      } else if (tempProgression === 0) {
-        newStatut = 'a_faire';
-        message = "📋 À faire";
-      }
-      
-      // Envoyer la mise à jour de progression
-      const response = await fetch(`${API_URL}/projets/taches/${selectedTask.id}/progression`, {
+      const r = await fetch(`${API_URL}/projets/taches/${selectedTask.id}/progression`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ progression: tempProgression })
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ progression: tempProgression }),
       });
-      
-      if (!response.ok) {
-        throw new Error('Erreur lors de la sauvegarde');
-      }
-      
-      const data = await response.json();
-      console.log("📡 Réponse backend:", data);
-      
-      // Recharger les données
+      if (!r.ok) throw new Error('Erreur sauvegarde');
+      // Sync statut aussi
+      await fetch(`${API_URL}/projets/taches/${selectedTask.id}/status`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: tempStatut, progression: tempProgression }),
+      });
       await fetchTasks();
-      
-      // Recharger les détails de la tâche
-      const detailResponse = await fetch(`${API_URL}/projets/taches/${selectedTask.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const detailData = await detailResponse.json();
-      if (detailData.success) {
-        const tache = detailData.tache;
-        if (tache.date_debut) {
-          tache.date_debut = new Date(tache.date_debut).toISOString().split('T')[0];
-        }
-        if (tache.date_echeance) {
-          tache.date_echeance = new Date(tache.date_echeance).toISOString().split('T')[0];
-        }
-        setSelectedTask(tache);
-        setTempStatut(tache.statut);
-        setTempProgression(tache.progression);
+      const dr = await fetch(`${API_URL}/projets/taches/${selectedTask.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const dd = await dr.json();
+      if (dd.success) {
+        const t = dd.tache;
+        if (t.date_debut) t.date_debut = new Date(t.date_debut).toISOString().split('T')[0];
+        if (t.date_echeance) t.date_echeance = new Date(t.date_echeance).toISOString().split('T')[0];
+        setSelectedTask(t); setTempStatut(t.statut); setTempProgression(t.progression);
       }
-      
-      // Afficher un message de succès
-      alert(`✅ Avancement mis à jour : ${tempProgression}%\n${message}`);
-      
-    } catch (error) {
-      console.error('Erreur sauvegarde:', error);
-      alert('❌ Erreur lors de la sauvegarde');
-    } finally {
-      setSaving(false);
-    }
+      alert(`✅ Avancement mis à jour : ${tempProgression}%`);
+    } catch (e) { alert('❌ Erreur lors de la sauvegarde'); } finally { setSaving(false); }
   };
 
-  // ===================== AJOUTER UN COMMENTAIRE =====================
   const handleAddComment = async (taskId: number) => {
     if (!newComment.trim()) return;
-
     try {
-      const response = await fetch(`${API_URL}/projets/taches/${taskId}/commentaires`, {
+      const r = await fetch(`${API_URL}/projets/taches/${taskId}/commentaires`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          tache_id: taskId,
-          commentaire: newComment.trim()
-        })
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tache_id: taskId, commentaire: newComment.trim() }),
       });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        const detailResponse = await fetch(`${API_URL}/projets/taches/${taskId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const detailData = await detailResponse.json();
-        if (detailData.success) {
-          setSelectedTask(detailData.tache);
-          setTempStatut(detailData.tache.statut);
-          setTempProgression(detailData.tache.progression);
-        }
+      const d = await r.json();
+      if (r.ok && d.success) {
+        const dr = await fetch(`${API_URL}/projets/taches/${taskId}`, { headers: { Authorization: `Bearer ${token}` } });
+        const dd = await dr.json();
+        if (dd.success) { setSelectedTask(dd.tache); setTempStatut(dd.tache.statut); setTempProgression(dd.tache.progression); }
         setNewComment('');
-      } else {
-        alert(data.message || 'Erreur lors de l\'ajout du commentaire');
-      }
-    } catch (error) {
-      console.error('Erreur ajout commentaire:', error);
-      alert('Erreur de connexion');
-    }
+      } else { alert(d.message || 'Erreur commentaire'); }
+    } catch (e) { alert('Erreur de connexion'); }
   };
 
-  // ===================== MODIFIER UN COMMENTAIRE =====================
-  const openEditComment = (comment: Comment) => {
-    setEditingComment(comment);
-    setEditCommentText(comment.texte);
-    setShowEditCommentModal(true);
-  };
+  const openEditComment = (c: Comment) => { setEditingComment(c); setEditCommentText(c.texte); setShowEditCommentModal(true); };
 
   const handleEditComment = async () => {
-    if (!editingComment) return;
-    if (!editCommentText.trim()) return;
-
+    if (!editingComment || !editCommentText.trim()) return;
     try {
-      const response = await fetch(`${API_URL}/projets/commentaires/${editingComment.id}`, {
+      const r = await fetch(`${API_URL}/projets/commentaires/${editingComment.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ texte: editCommentText.trim() })
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texte: editCommentText.trim() }),
       });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        const detailResponse = await fetch(`${API_URL}/projets/taches/${selectedTask?.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const detailData = await detailResponse.json();
-        if (detailData.success) {
-          setSelectedTask(detailData.tache);
-          setTempStatut(detailData.tache.statut);
-          setTempProgression(detailData.tache.progression);
-        }
-        setShowEditCommentModal(false);
-        setEditingComment(null);
-        setEditCommentText('');
-      } else {
-        alert(data.message || 'Erreur lors de la modification');
+      const d = await r.json();
+      if (r.ok && d.success) {
+        const dr = await fetch(`${API_URL}/projets/taches/${selectedTask?.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        const dd = await dr.json();
+        if (dd.success) { setSelectedTask(dd.tache); }
+        setShowEditCommentModal(false); setEditingComment(null); setEditCommentText('');
       }
-    } catch (error) {
-      console.error('Erreur modification commentaire:', error);
-      alert('Erreur de connexion');
-    }
+    } catch (e) { alert('Erreur'); }
   };
 
-  // ===================== SUPPRIMER UN COMMENTAIRE =====================
   const handleDeleteComment = async (commentId: number, taskId: number) => {
     if (!window.confirm('Supprimer ce commentaire ?')) return;
-    
     try {
-      const response = await fetch(`${API_URL}/projets/commentaires/${commentId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        const detailResponse = await fetch(`${API_URL}/projets/taches/${taskId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const detailData = await detailResponse.json();
-        if (detailData.success) {
-          setSelectedTask(detailData.tache);
-          setTempStatut(detailData.tache.statut);
-          setTempProgression(detailData.tache.progression);
-        }
+      const r = await fetch(`${API_URL}/projets/commentaires/${commentId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (r.ok && d.success) {
+        const dr = await fetch(`${API_URL}/projets/taches/${taskId}`, { headers: { Authorization: `Bearer ${token}` } });
+        const dd = await dr.json();
+        if (dd.success) { setSelectedTask(dd.tache); }
       }
-    } catch (error) {
-      console.error('Erreur suppression commentaire:', error);
-      alert('Erreur de connexion');
-    }
+    } catch (e) { alert('Erreur'); }
   };
 
-  // ===================== OUVRIRE LES DÉTAILS =====================
   const openDetail = async (taskId: number) => {
     try {
-      const response = await fetch(`${API_URL}/projets/taches/${taskId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        const tache = data.tache;
-        if (tache.date_debut) {
-          tache.date_debut = new Date(tache.date_debut).toISOString().split('T')[0];
-        }
-        if (tache.date_echeance) {
-          tache.date_echeance = new Date(tache.date_echeance).toISOString().split('T')[0];
-        }
-        setSelectedTask(tache);
-        setTempStatut(tache.statut);
-        setTempProgression(tache.progression);
-        setShowDetailModal(true);
-        setNewComment('');
+      const r = await fetch(`${API_URL}/projets/taches/${taskId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (d.success) {
+        const t = d.tache;
+        if (t.date_debut) t.date_debut = new Date(t.date_debut).toISOString().split('T')[0];
+        if (t.date_echeance) t.date_echeance = new Date(t.date_echeance).toISOString().split('T')[0];
+        setSelectedTask(t); setTempStatut(t.statut); setTempProgression(t.progression);
+        loadTaskSubtasks(taskId);
+        setShowDetailModal(true); setNewComment('');
       }
-    } catch (error) {
-      console.error('Erreur chargement détails:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  // ===================== MODIFIER UNE TÂCHE =====================
-  const openEditTask = (task: Task) => {
-    setEditForm({ ...task });
-    setEditError('');
-    setShowEditModal(true);
-  };
+  const openEditTask = (task: Task) => { setEditForm({ ...task }); setEditError(''); setShowEditModal(true); };
 
   const handleEditTask = async () => {
     if (!editForm) return;
-    if (!editForm.titre.trim()) {
-      setEditError('Le titre est obligatoire');
-      return;
-    }
-    if (!editForm.date_echeance) {
-      setEditError('La date d\'échéance est obligatoire');
-      return;
-    }
-
-    setEditLoading(true);
-    setEditError('');
-
+    if (!editForm.titre.trim()) { setEditError('Le titre est obligatoire'); return; }
+    if (!editForm.date_echeance) { setEditError("La date d'échéance est obligatoire"); return; }
+    setEditLoading(true); setEditError('');
     try {
-      const response = await fetch(`${API_URL}/projets/taches/${editForm.id}`, {
+      const r = await fetch(`${API_URL}/projets/taches/${editForm.id}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          titre: editForm.titre,
-          description: editForm.description,
-          assigne_a: editForm.assigne_a,
-          priorite: editForm.priorite,
-          date_debut: formatDateForBackend(editForm.date_debut || ''),
-          date_echeance: formatDateForBackend(editForm.date_echeance)
+          titre: editForm.titre, description: editForm.description, assigne_a: editForm.assigne_a,
+          priorite: editForm.priorite, date_debut: formatDateForBackend(editForm.date_debut || ''),
+          date_echeance: formatDateForBackend(editForm.date_echeance),
         }),
       });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setShowEditModal(false);
-        fetchTasks();
-      } else {
-        setEditError(data.message || 'Erreur lors de la modification');
-      }
-    } catch (error) {
-      console.error('Erreur modification:', error);
-      setEditError('Erreur de connexion');
-    } finally {
-      setEditLoading(false);
-    }
+      const d = await r.json();
+      if (r.ok && d.success) { setShowEditModal(false); fetchTasks(); }
+      else { setEditError(d.message || 'Erreur modification'); }
+    } catch (e) { setEditError('Erreur de connexion'); } finally { setEditLoading(false); }
   };
 
-  // Filtrage
-  const filtered = tasks.filter((t) => {
+  const filtered = tasks.filter(t => {
     const matchSearch = t.titre.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || t.statut === filterStatus;
     return matchSearch && matchStatus;
   });
 
-  if (loading) {
+  // ── Subtask progress ring ─────────────────────────────
+  const SubtaskRing = ({ done, total }: { done: number; total: number }) => {
+    if (total === 0) return null;
+    const pct = Math.round((done / total) * 100);
+    const r = 14; const circ = 2 * Math.PI * r;
+    const dash = (pct / 100) * circ;
     return (
-      <div style={{ textAlign: 'center', padding: '4rem' }}>
-        <p>Chargement des tâches...</p>
-      </div>
+      <svg width="36" height="36" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx="18" cy="18" r={r} fill="none" stroke={T.slate100} strokeWidth="3" />
+        <circle cx="18" cy="18" r={r} fill="none" stroke={pct === 100 ? T.green : T.blue600} strokeWidth="3"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray .4s' }} />
+        <text x="18" y="18" textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="700"
+          fill={pct === 100 ? T.green : T.blue600} style={{ transform: 'rotate(90deg)', transformOrigin: '18px 18px' }}>
+          {pct}%
+        </text>
+      </svg>
     );
-  }
+  };
+
+  if (loading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
+      <div style={{ width: 44, height: 44, border: `3px solid ${T.blue100}`, borderTop: `3px solid ${T.blue600}`, borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+      <p style={{ color: T.slate500, fontWeight: 500, fontSize: 14 }}>Chargement des tâches...</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  // ── Modal overlay style ───────────────────────────────
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed', inset: 0, background: 'rgba(15,23,42,.65)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+  };
+  const modalStyle: React.CSSProperties = {
+    background: T.white, borderRadius: 20, width: '100%',
+    boxShadow: '0 24px 64px rgba(0,0,0,.18)', maxHeight: '90vh', overflowY: 'auto',
+  };
 
   return (
-    <div style={{ fontFamily: "'Outfit', sans-serif", display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{ fontFamily: "'DM Sans','Segoe UI',sans-serif", display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        .trow:hover td{background:${T.blue50}!important}
+        .subtask-row:hover{background:${T.slate50}!important}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes highlightPulse{0%,100%{background:${T.amber50}}50%{background:${T.amberMid}}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .fu{animation:fadeUp .3s ease both}
+        input[type=range]{accent-color:${T.blue600};cursor:pointer}
+        .subtask-check{transition:all .15s}
+        .subtask-check:hover{transform:scale(1.1)}
+      `}</style>
 
-      {/* ===================== HEADER ===================== */}
+      {/* ── Header ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0 0 4px 0' }}>📋 Tâches</h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>{tasks.length} tâches au total</p>
+          <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: T.blue600, letterSpacing: 1.2, textTransform: 'uppercase' }}>Gestion</p>
+          <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: T.slate900, letterSpacing: '-0.5px' }}>Mes tâches</h1>
+          <p style={{ margin: '3px 0 0', fontSize: 13, color: T.slate500 }}>{tasks.length} tâches au total</p>
         </div>
         {isChef && (
-          <button
-            onClick={() => { setShowCreateModal(true); setFormError(''); }}
-            style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(30,58,138,0.25)' }}
-          >
+          <button onClick={() => { setShowCreateModal(true); setFormError(''); }}
+            style={{ padding: '10px 20px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: `0 4px 14px ${T.blue600}44` }}>
             + Nouvelle tâche
           </button>
         )}
       </div>
 
-      {/* ===================== FILTRES ===================== */}
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="Rechercher une tâche..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ ...inputStyle, maxWidth: '280px' }}
-        />
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: '#fff', cursor: 'pointer' }}
-        >
+      {/* ── Filters ── */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <input type="text" placeholder="Rechercher une tâche..." value={search} onChange={e => setSearch(e.target.value)}
+          style={{ ...inputSx, maxWidth: 280 }} />
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          style={{ ...inputSx, width: 'auto', cursor: 'pointer' }}>
           <option value="all">Tous les statuts</option>
           <option value="a_faire">À faire</option>
           <option value="en_cours">En cours</option>
@@ -675,113 +486,94 @@ export default function TasksList() {
         </select>
       </div>
 
-      {/* ===================== TABLEAU DES TÂCHES ===================== */}
-      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+      {/* ── Table ── */}
+      <div style={{ background: T.white, borderRadius: 18, border: `1px solid ${T.slate100}`, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Tâche</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Projet</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>
-                  {isChef ? 'Assigné à' : 'Chef de projet'}
-                </th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Priorité</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Statut</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Avancement</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Échéance</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>Actions</th>
+              <tr style={{ background: T.slate50, borderBottom: `1px solid ${T.slate100}` }}>
+                {['Tâche', 'Projet', isChef ? 'Assigné à' : 'Chef', 'Priorité', 'Statut', 'Avancement', 'Échéance', 'Actions'].map(h => (
+                  <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontWeight: 700, color: T.slate500, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.6px' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t) => {
-                const sc = statusColor[t.statut] || { bg: '#f1f5f9', color: '#475569' };
-                const pc = priorityColor[t.priorite] || { bg: '#f1f5f9', color: '#475569' };
+              {filtered.map(t => {
+                const sc = statusStyle[t.statut] || { bg: T.slate100, color: T.slate500 };
+                const pc = priorityStyle[t.priorite] || { bg: T.slate100, color: T.slate500 };
                 const isHighlighted = highlightedTask === t.id;
+                const taskSubtasks = loadSubtasks(t.id);
+                const hasSubs = taskSubtasks.length > 0;
+                const subsDone = taskSubtasks.filter(s => s.termine).length;
                 return (
-                  <tr 
-                    key={t.id} 
-                    ref={isHighlighted ? highlightedRowRef : null}
-                    style={{ 
-                      borderBottom: '1px solid #f1f5f9',
-                      background: isHighlighted ? '#fef9c3' : 'transparent',
-                      animation: isHighlighted ? 'highlightPulse 1s ease-in-out 3' : 'none',
-                      transition: 'all 0.3s ease',
-                      transform: isHighlighted ? 'scale(1.01)' : 'scale(1)',
-                      boxShadow: isHighlighted ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
-                    }}
-                  >
-                    <td style={{ padding: '14px 16px' }}>
-                      <p style={{ fontWeight: 600, color: '#0f172a', margin: 0, cursor: 'pointer' }} onClick={() => openDetail(t.id)}>{t.titre}</p>
-                      <p style={{ color: '#94a3b8', fontSize: '11px', margin: '2px 0 0 0' }}>T-{t.id} · {t.commentaires?.length || 0} commentaire(s)</p>
+                  <tr key={t.id} ref={isHighlighted ? highlightedRowRef : null} className="trow"
+                    style={{ borderBottom: `1px solid ${T.slate50}`, animation: isHighlighted ? 'highlightPulse 1s ease 3' : 'none' }}>
+                    <td style={{ padding: '13px 16px' }}>
+                      <p style={{ fontWeight: 700, color: T.slate900, margin: 0, cursor: 'pointer' }} onClick={() => openDetail(t.id)}>{t.titre}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                        <span style={{ fontSize: 10, color: T.slate400 }}>T-{t.id}</span>
+                        {hasSubs && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: T.blue600, background: T.blue50, padding: '1px 6px', borderRadius: 20 }}>
+                            {subsDone}/{taskSubtasks.length} sous-tâches
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <Link to={`/projects/${t.projet_id}`} style={{ color: '#1e40af', fontSize: '13px', textDecoration: 'none', fontWeight: 500 }}>
-                        {t.nom_projet || 'Chargement...'}
+                    <td style={{ padding: '13px 16px' }}>
+                      <Link to={`/projects/${t.projet_id}`} style={{ color: T.blue600, fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
+                        {t.nom_projet || '—'}
                       </Link>
                     </td>
-                    <td style={{ padding: '14px 16px', color: '#475569' }}>
-                      {isChef ? (
-                        t.assigne_nom || 'Non assigné'
-                      ) : (
-                        t.chef_nom || 'Chef non trouvé'
-                      )}
+                    <td style={{ padding: '13px 16px', color: T.slate600, fontSize: 13 }}>
+                      {isChef ? (t.assigne_nom || 'Non assigné') : (t.chef_nom || '—')}
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, padding: '3px 10px', borderRadius: '20px', background: pc.bg, color: pc.color }}>
+                    <td style={{ padding: '13px 16px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: pc.bg, color: pc.color }}>
                         {traduirePriorite(t.priorite)}
                       </span>
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <select
-                        value={t.statut}
-                        onChange={(e) => {
-                          const newStatut = e.target.value;
-                          if (selectedTask?.id === t.id) {
-                            setTempStatut(newStatut);
-                          }
-                          handleStatusChange(t.id, newStatut);
-                        }}
-                        style={{ fontSize: '12px', fontWeight: 600, padding: '3px 8px', borderRadius: '20px', background: sc.bg, color: sc.color, border: 'none', cursor: 'pointer', outline: 'none' }}
-                      >
+                    <td style={{ padding: '13px 16px' }}>
+                      <select value={t.statut} onChange={e => handleStatusChange(t.id, e.target.value)}
+                        style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: sc.bg, color: sc.color, border: 'none', cursor: 'pointer', outline: 'none' }}>
                         <option value="a_faire">À faire</option>
                         <option value="en_cours">En cours</option>
                         <option value="termine">Terminé</option>
                       </select>
                     </td>
-                    <td style={{ padding: '14px 16px', minWidth: '120px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ flex: 1, height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${t.progression}%`, background: t.progression === 100 ? '#16a34a' : '#1d4ed8', borderRadius: '999px' }} />
-                        </div>
-                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>{t.progression}%</span>
+                    <td style={{ padding: '13px 16px', minWidth: 130 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {hasSubs
+                          ? <SubtaskRing done={subsDone} total={taskSubtasks.length} />
+                          : (
+                            <>
+                              <div style={{ flex: 1, height: 5, background: T.slate100, borderRadius: 99, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${t.progression}%`, background: t.progression === 100 ? T.green : T.blue600, borderRadius: 99 }} />
+                              </div>
+                              <span style={{ fontSize: 11, color: T.slate400, minWidth: 28 }}>{t.progression}%</span>
+                            </>
+                          )
+                        }
                       </div>
                     </td>
-                    <td style={{ padding: '14px 16px', color: '#94a3b8', fontSize: '13px' }}>
-                      {t.date_echeance ? new Date(t.date_echeance).toLocaleDateString() : '—'}
-                      {t.alerte === 'en_retard' && <span style={{ color: '#ef4444', marginLeft: '4px' }}>⚠️</span>}
+                    <td style={{ padding: '13px 16px', color: T.slate400, fontSize: 12 }}>
+                      {t.date_echeance ? new Date(t.date_echeance).toLocaleDateString('fr-FR') : '—'}
+                      {t.alerte === 'en_retard' && <span style={{ color: T.rose, marginLeft: 4 }}>⚠️</span>}
                     </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => openDetail(t.id)}
-                          style={{ padding: '5px 10px', background: '#eff6ff', color: '#1e40af', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          📋 Détail
+                    <td style={{ padding: '13px 16px' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button onClick={() => openDetail(t.id)}
+                          style={{ padding: '5px 10px', background: T.blue50, color: T.blue600, border: `1px solid ${T.blue100}`, borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                          Détail
                         </button>
                         {isChef && (
                           <>
-                            <button
-                              onClick={() => openEditTask(t)}
-                              style={{ padding: '5px 10px', background: '#f0fdf4', color: '#166534', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              ✏️ Modifier
+                            <button onClick={() => openEditTask(t)}
+                              style={{ padding: '5px 10px', background: T.green50, color: T.green, border: `1px solid ${T.greenMid}`, borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              Modifier
                             </button>
-                            <button
-                              onClick={() => handleDelete(t.id)}
-                              style={{ padding: '5px 10px', background: '#fff1f2', color: '#be123c', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              🗑️ Supprimer
+                            <button onClick={() => handleDelete(t.id)}
+                              style={{ padding: '5px 10px', background: T.rose50, color: T.rose, border: `1px solid ${T.roseMid}`, borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              Supprimer
                             </button>
                           </>
                         )}
@@ -790,415 +582,262 @@ export default function TasksList() {
                   </tr>
                 );
               })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={8} style={{ padding: 48, textAlign: 'center', color: T.slate400 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  <p style={{ fontWeight: 600, margin: 0 }}>Aucune tâche trouvée</p>
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      <style>{`
-        @keyframes highlightPulse {
-          0% {
-            background-color: #fef9c3;
-            transform: scale(1);
-          }
-          50% {
-            background-color: #fde047;
-            transform: scale(1.02);
-          }
-          100% {
-            background-color: #fef9c3;
-            transform: scale(1);
-          }
-        }
-      `}</style>
-
-      {/* ===================== MODAL DE CRÉATION ===================== */}
-      {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setShowCreateModal(false)}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '520px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>➕ Nouvelle tâche</h2>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-            </div>
-
-            {formError && (
-              <div style={{ padding: '10px 14px', background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: '10px', color: '#c53030', fontSize: '13px', marginBottom: '16px' }}>
-                ⚠️ {formError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Titre <span style={{ color: '#ef4444' }}>*</span></label>
-                <input type="text" placeholder="Ex: Maquette page accueil" value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Description</label>
-                <textarea placeholder="Décrivez la tâche..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} style={{ ...inputStyle, resize: 'none' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Projet <span style={{ color: '#ef4444' }}>*</span></label>
-                <select value={form.projet_id} onChange={(e) => setForm({ ...form, projet_id: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">-- Sélectionner --</option>
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.nom_projet}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Assigné à <span style={{ color: '#ef4444' }}>*</span></label>
-                <select value={form.assigne_a} onChange={(e) => setForm({ ...form, assigne_a: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">-- Sélectionner --</option>
-                  {usersList.map((u) => <option key={u.id} value={u.id}>{u.nom_complet} {u.role === 'chef_projet' ? '(Chef)' : ''}</option>)}
-                </select>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Priorité</label>
-                  <select value={form.priorite} onChange={(e) => setForm({ ...form, priorite: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    <option value="haute">Haute</option>
-                    <option value="moyenne">Moyenne</option>
-                    <option value="faible">Basse</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date de début</label>
-                  <input type="date" value={form.date_debut} onChange={(e) => setForm({ ...form, date_debut: e.target.value })} style={inputStyle} />
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date d'échéance <span style={{ color: '#ef4444' }}>*</span></label>
-                <input type="date" value={form.date_echeance} onChange={(e) => setForm({ ...form, date_echeance: e.target.value })} style={inputStyle} />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem' }}>
-              <button onClick={() => setShowCreateModal(false)} style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
-              <button onClick={handleCreateTask} disabled={formLoading} style={{ flex: 1, padding: '11px', background: formLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: formLoading ? 'not-allowed' : 'pointer' }}>
-                {formLoading ? 'Création...' : '✅ Créer la tâche'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================== MODAL DÉTAIL TÂCHE ===================== */}
+      {/* ===================== MODAL DÉTAIL ===================== */}
       {showDetailModal && selectedTask && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setShowDetailModal(false)}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '580px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div style={overlayStyle} onClick={() => setShowDetailModal(false)}>
+          <div style={{ ...modalStyle, maxWidth: 640, padding: 28 }} onClick={e => e.stopPropagation()}>
 
-            {/* En-tête */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '0 0 6px 0' }}>{selectedTask.titre}</h2>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', background: priorityColor[selectedTask.priorite]?.bg || '#f1f5f9', color: priorityColor[selectedTask.priorite]?.color || '#475569' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div style={{ flex: 1, marginRight: 12 }}>
+                <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 800, color: T.slate900 }}>{selectedTask.titre}</h2>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: priorityStyle[selectedTask.priorite]?.bg, color: priorityStyle[selectedTask.priorite]?.color }}>
                     {traduirePriorite(selectedTask.priorite)}
                   </span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Assigné à : <strong>{selectedTask.assigne_nom}</strong></span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Échéance : <strong>{new Date(selectedTask.date_echeance).toLocaleDateString()}</strong></span>
+                  <span style={{ fontSize: 12, color: T.slate500 }}>Assigné à : <strong style={{ color: T.slate700 }}>{selectedTask.assigne_nom}</strong></span>
+                  <span style={{ fontSize: 12, color: T.slate500 }}>Échéance : <strong style={{ color: T.slate700 }}>{new Date(selectedTask.date_echeance).toLocaleDateString('fr-FR')}</strong></span>
                 </div>
               </div>
-              <button onClick={() => setShowDetailModal(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+              <button onClick={() => setShowDetailModal(false)}
+                style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: 'pointer', color: T.slate500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
             </div>
 
             {/* Description */}
             {selectedTask.description && (
-              <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-                <p style={{ fontSize: '13px', color: '#475569', margin: 0 }}>{selectedTask.description}</p>
-              </div>
-            )}
-            
-            {/* Analyse avancement */}
-            {selectedTask.analyse_avancement && (
-              <div style={{ 
-                background: selectedTask.analyse_avancement.statut_risque === 'en_retard' ? '#fee2e2' : 
-                           selectedTask.analyse_avancement.statut_risque === 'deadline_proche' ? '#fef9c3' : '#f0fdf4', 
-                borderRadius: '10px', 
-                padding: '10px 14px', 
-                marginBottom: '16px' 
-              }}>
-                <p style={{ fontSize: '12px', margin: 0, color: '#374151' }}>
-                  📊 {selectedTask.analyse_avancement.conseil}
-                </p>
-                <p style={{ fontSize: '11px', margin: '4px 0 0 0', color: '#15803d' }}>
-                  Avancement recommandé : {selectedTask.analyse_avancement.avancement_recommande}
-                </p>
+              <div style={{ background: T.slate50, borderRadius: 12, padding: '12px 14px', marginBottom: 16, border: `1px solid ${T.slate100}` }}>
+                <p style={{ fontSize: 13, color: T.slate600, margin: 0 }}>{selectedTask.description}</p>
               </div>
             )}
 
-            {/* ===================== SECTION STATUT & AVANCEMENT ===================== */}
-            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', margin: '0 0 12px 0' }}>📊 Avancement de la tâche</h3>
-              
-              {/* Statut - Boutons */}
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>Statut</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                  {[
-                    { value: 'a_faire', label: 'À faire' },
-                    { value: 'en_cours', label: 'En cours' },
-                    { value: 'termine', label: 'Terminé' }
-                  ].map((s) => {
-                    const sc = statusColor[s.value];
-                    const isActive = tempStatut === s.value;
+            {/* Analyse avancement */}
+            {selectedTask.analyse_avancement && (
+              <div style={{ background: selectedTask.analyse_avancement.statut_risque === 'en_retard' ? T.rose50 : selectedTask.analyse_avancement.statut_risque === 'deadline_proche' ? T.amber50 : T.green50, borderRadius: 12, padding: '10px 14px', marginBottom: 16, border: `1px solid ${selectedTask.analyse_avancement.statut_risque === 'en_retard' ? T.roseMid : T.amberMid}` }}>
+                <p style={{ fontSize: 12, margin: 0, color: T.slate700 }}>📊 {selectedTask.analyse_avancement.conseil}</p>
+                <p style={{ fontSize: 11, margin: '4px 0 0', color: T.green }}>Recommandé : {selectedTask.analyse_avancement.avancement_recommande}</p>
+              </div>
+            )}
+
+            {/* ── SUBTASKS ── */}
+            <div style={{ background: T.slate50, borderRadius: 14, padding: 18, marginBottom: 18, border: `1px solid ${T.slate100}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 3, height: 16, background: T.blue600, borderRadius: 99 }} />
+                  <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>
+                    Sous-tâches
+                  </h3>
+                  <span style={{ fontSize: 11, fontWeight: 700, background: T.blue50, color: T.blue600, padding: '2px 8px', borderRadius: 20 }}>
+                    {subtasks.filter(s => s.termine).length}/{subtasks.length}
+                  </span>
+                </div>
+                {subtasks.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ height: 6, width: 100, background: T.slate200, borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${calcProgression(subtasks)}%`, background: calcProgression(subtasks) === 100 ? T.green : T.blue600, borderRadius: 99, transition: 'width .4s' }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: calcProgression(subtasks) === 100 ? T.green : T.blue600 }}>{calcProgression(subtasks)}%</span>
+                  </div>
+                )}
+              </div>
+
+              {/* List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
+                {subtasks.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: T.slate400, fontSize: 12, padding: '12px 0', margin: 0 }}>
+                    Aucune sous-tâche — ajoutez-en ci-dessous
+                  </p>
+                ) : subtasks.map(s => (
+                  <div key={s.id} className="subtask-row fu" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: T.white, borderRadius: 10, border: `1px solid ${s.termine ? T.greenMid : T.slate200}`, transition: 'all .15s' }}>
+                    <button className="subtask-check" onClick={() => toggleSubtask(s.id)}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${s.termine ? T.green : T.slate300}`, background: s.termine ? T.green : T.white, color: T.white, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, fontSize: 12, fontWeight: 700 }}>
+                      {s.termine ? '✓' : ''}
+                    </button>
+                    <span style={{ flex: 1, fontSize: 13, color: s.termine ? T.slate400 : T.slate900, fontWeight: s.termine ? 400 : 500, textDecoration: s.termine ? 'line-through' : 'none' }}>
+                      {s.titre}
+                    </span>
+                    <button onClick={() => deleteSubtask(s.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.slate400, fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add subtask */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)}
+                  placeholder="Nouvelle sous-tâche..."
+                  onKeyDown={e => { if (e.key === 'Enter') addSubtask(); }}
+                  style={{ ...inputSx, flex: 1, fontSize: 13, padding: '8px 12px' }} />
+                <button onClick={addSubtask} disabled={!newSubtaskTitle.trim()}
+                  style={{ padding: '8px 16px', background: newSubtaskTitle.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: newSubtaskTitle.trim() ? 'pointer' : 'not-allowed' }}>
+                  + Ajouter
+                </button>
+              </div>
+
+              {subtasks.length > 0 && (
+                <p style={{ margin: '8px 0 0', fontSize: 11, color: T.blue600, fontWeight: 600 }}>
+                  💡 L'avancement se calcule automatiquement selon vos sous-tâches
+                </p>
+              )}
+            </div>
+
+            {/* ── AVANCEMENT ── */}
+            <div style={{ background: T.white, borderRadius: 14, padding: 18, marginBottom: 18, border: `1px solid ${T.slate100}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 3, height: 16, background: T.green, borderRadius: 99 }} />
+                <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>Avancement de la tâche</h3>
+              </div>
+
+              {/* Statut buttons */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: T.slate500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.6px' }}>Statut</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                  {[{ value: 'a_faire', label: 'À faire' }, { value: 'en_cours', label: 'En cours' }, { value: 'termine', label: 'Terminé' }].map(s => {
+                    const sc = statusStyle[s.value];
+                    const active = tempStatut === s.value;
                     return (
-                      <button
-                        key={s.value}
-                        type="button"
+                      <button key={s.value} type="button"
                         onClick={() => {
+                          if (subtasks.length > 0) return; // subtasks control avancement
                           setTempStatut(s.value);
-                          // Mettre à jour la progression selon le statut
-                          let newProgression = tempProgression;
-                          if (s.value === 'termine') newProgression = 100;
-                          else if (s.value === 'en_cours' && tempProgression === 0) newProgression = 25;
-                          else if (s.value === 'a_faire') newProgression = 0;
-                          setTempProgression(newProgression);
+                          if (s.value === 'termine') setTempProgression(100);
+                          else if (s.value === 'en_cours' && tempProgression === 0) setTempProgression(25);
+                          else if (s.value === 'a_faire') setTempProgression(0);
                         }}
-                        style={{
-                          padding: '8px 4px', borderRadius: '8px', border: `2px solid ${isActive ? sc.color : '#e2e8f0'}`,
-                          background: isActive ? sc.bg : '#fff',
-                          color: isActive ? sc.color : '#64748b',
-                          fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
+                        style={{ padding: '8px 4px', borderRadius: 10, border: `2px solid ${active ? sc.color : T.slate200}`, background: active ? sc.bg : T.white, color: active ? sc.color : T.slate500, fontSize: 12, fontWeight: 700, cursor: subtasks.length > 0 ? 'default' : 'pointer', transition: 'all .15s', opacity: subtasks.length > 0 ? .6 : 1 }}>
                         {s.label}
                       </button>
                     );
                   })}
                 </div>
+                {subtasks.length > 0 && (
+                  <p style={{ margin: '8px 0 0', fontSize: 11, color: T.amber, fontWeight: 600 }}>
+                    ⚡ Statut géré automatiquement par les sous-tâches
+                  </p>
+                )}
               </div>
-              
-              {/* Avancement - Slider */}
+
+              {/* Progression display */}
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
-                  Avancement : {tempProgression}%
-                </label>
-                
-                {/* Barre de recommandation */}
-                {selectedTask.analyse_avancement && (
-                  <div style={{ marginBottom: '4px' }}>
-                    <div style={{ 
-                      height: '4px', 
-                      background: '#e2e8f0', 
-                      borderRadius: '999px',
-                      position: 'relative'
-                    }}>
-                      <div style={{
-                        position: 'absolute',
-                        left: `${parseInt(selectedTask.analyse_avancement.avancement_recommande)}%`,
-                        width: '2px',
-                        height: '12px',
-                        background: '#f59e0b',
-                        borderRadius: '999px',
-                        top: '-4px',
-                        transform: 'translateX(-50%)'
-                      }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.slate500, textTransform: 'uppercase', letterSpacing: '.6px' }}>Avancement</label>
+                  <span style={{ fontSize: 20, fontWeight: 800, color: tempProgression === 100 ? T.green : T.blue600, letterSpacing: '-1px' }}>{tempProgression}%</span>
+                </div>
+
+                {subtasks.length > 0 ? (
+                  // Subtask-driven progress bar (not interactive)
+                  <div>
+                    <div style={{ height: 10, background: T.slate100, borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${tempProgression}%`, background: tempProgression === 100 ? T.green : T.blue600, borderRadius: 99, transition: 'width .5s ease' }} />
                     </div>
-                    <p style={{ fontSize: '10px', color: '#f59e0b', margin: '2px 0 0 0' }}>
-                      📍 Recommandé: {selectedTask.analyse_avancement.avancement_recommande}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      {subtasks.map(s => (
+                        <div key={s.id} style={{ flex: 1, height: 4, background: s.termine ? T.green : T.slate200, borderRadius: 99, margin: '0 1px', transition: 'background .3s' }} title={s.titre} />
+                      ))}
+                    </div>
+                    <p style={{ margin: '6px 0 0', fontSize: 11, color: T.slate500 }}>
+                      {subtasks.filter(s => s.termine).length} / {subtasks.length} sous-tâches terminées
                     </p>
                   </div>
-                )}
-                
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={tempProgression}
-                  onChange={(e) => {
-                    const newProgress = Number(e.target.value);
-                    setTempProgression(newProgress);
-                    // Mettre à jour le statut automatiquement selon la progression
-                    if (newProgress === 100) {
-                      setTempStatut('termine');
-                    } else if (newProgress > 0 && newProgress < 100) {
-                      setTempStatut('en_cours');
-                    } else if (newProgress === 0) {
-                      setTempStatut('a_faire');
-                    }
-                  }}
-                  style={{ width: '100%', accentColor: '#1d4ed8' }}
-                />
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>0%</span>
-                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>50%</span>
-                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>100%</span>
-                </div>
-                
-                {/* Barre de progression visuelle */}
-                <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden', marginTop: '12px' }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${tempProgression}%`, 
-                    background: tempProgression === 100 ? '#16a34a' : '#1d4ed8', 
-                    borderRadius: '999px',
-                    transition: 'width 0.3s'
-                  }} />
-                </div>
-                
-                {/* Input numérique */}
-                <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Ou saisir :</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={tempProgression}
-                    onChange={(e) => {
-                      const newProgress = Number(e.target.value);
-                      setTempProgression(newProgress);
-                      if (newProgress === 100) {
-                        setTempStatut('termine');
-                      } else if (newProgress > 0 && newProgress < 100) {
-                        setTempStatut('en_cours');
-                      } else if (newProgress === 0) {
-                        setTempStatut('a_faire');
-                      }
-                    }}
-                    style={{ width: '80px', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px' }}
-                  />
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>%</span>
-                </div>
-              </div>
-
-              {/* Bouton Enregistrer */}
-              <div style={{ marginTop: '16px' }}>
-                <button
-                  onClick={handleSaveChanges}
-                  disabled={saving}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    background: saving ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '10px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  {saving ? '⏳ Enregistrement...' : '💾 Enregistrer les modifications'}
-                </button>
-              </div>
-            </div>
-            
-            {/* ===================== SECTION COMMENTAIRES ===================== */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
-                  💬 Commentaires ({selectedTask.commentaires?.length || 0})
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
-                {selectedTask.commentaires && selectedTask.commentaires.length > 0 ? (
-                  selectedTask.commentaires.map((c) => {
-                    return (
-                      <div key={c.id} style={{ 
-                        background: '#f8fafc', 
-                        borderRadius: '12px', 
-                        padding: '12px 14px', 
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{
-                              width: '28px',
-                              height: '28px',
-                              background: '#1e3a8a',
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#fff',
-                              fontWeight: 'bold',
-                              fontSize: '12px'
-                            }}>
-                              {c.auteur_nom?.charAt(0).toUpperCase() || 'U'}
-                            </div>
-                            <div>
-                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{c.auteur_nom}</span>
-                              <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '8px' }}>
-                                {new Date(c.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              onClick={() => openEditComment(c)}
-                              style={{ background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
-                              title="Modifier"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => handleDeleteComment(c.id, selectedTask.id)}
-                              style={{ background: 'none', border: 'none', color: '#be123c', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
-                              title="Supprimer"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                        <p style={{ fontSize: '13px', color: '#1e293b', margin: '6px 0 0 0', lineHeight: '1.4', wordBreak: 'break-word' }}>
-                          {c.texte}
-                        </p>
-                      </div>
-                    );
-                  })
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '24px', background: '#f8fafc', borderRadius: '10px' }}>
-                    <span style={{ fontSize: '28px' }}>💬</span>
-                    <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: '8px' }}>Aucun commentaire</p>
-                    <p style={{ color: '#cbd5e1', fontSize: '11px' }}>Soyez le premier à commenter !</p>
+                  // Manual slider
+                  <div>
+                    <input type="range" min={0} max={100} step={1} value={tempProgression}
+                      onChange={e => {
+                        const v = Number(e.target.value);
+                        setTempProgression(v);
+                        setTempStatut(v === 100 ? 'termine' : v > 0 ? 'en_cours' : 'a_faire');
+                      }}
+                      style={{ width: '100%' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.slate400, marginTop: 2 }}>
+                      <span>0%</span><span>50%</span><span>100%</span>
+                    </div>
+                    <div style={{ height: 6, background: T.slate100, borderRadius: 99, overflow: 'hidden', marginTop: 10 }}>
+                      <div style={{ height: '100%', width: `${tempProgression}%`, background: tempProgression === 100 ? T.green : T.blue600, borderRadius: 99, transition: 'width .3s' }} />
+                    </div>
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: T.slate500 }}>Saisie manuelle :</span>
+                      <input type="number" min={0} max={100} value={tempProgression}
+                        onChange={e => { const v = Number(e.target.value); setTempProgression(v); setTempStatut(v === 100 ? 'termine' : v > 0 ? 'en_cours' : 'a_faire'); }}
+                        style={{ width: 70, padding: '5px 8px', border: `1px solid ${T.slate200}`, borderRadius: 8, fontSize: 12 }} />
+                      <span style={{ fontSize: 12, color: T.slate500 }}>%</span>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Ajouter commentaire */}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Ajouter un commentaire..."
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddComment(selectedTask.id); }}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <button 
-                  onClick={() => handleAddComment(selectedTask.id)} 
-                  disabled={!newComment.trim()}
-                  style={{ 
-                    padding: '10px 16px', 
-                    background: newComment.trim() ? 'linear-gradient(135deg, #1e3a8a, #1d4ed8)' : '#94a3b8',
-                    color: '#fff', 
-                    border: 'none', 
-                    borderRadius: '10px', 
-                    fontSize: '13px', 
-                    fontWeight: 600, 
-                    cursor: newComment.trim() ? 'pointer' : 'not-allowed',
-                    flexShrink: 0 
-                  }}
-                >
-                  Envoyer 📨
-                </button>
-              </div>
-              <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '6px' }}>
-                ⚡ Appuyez sur Entrée pour envoyer
-              </p>
+              <button onClick={handleSaveChanges} disabled={saving}
+                style={{ width: '100%', marginTop: 16, padding: '11px', background: saving ? T.slate300 : `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                {saving ? '⏳ Enregistrement...' : '💾 Enregistrer les modifications'}
+              </button>
             </div>
 
-            {/* Bouton Supprimer (chef uniquement) */}
+            {/* ── COMMENTAIRES ── */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <div style={{ width: 3, height: 16, background: T.purple ?? T.slate700, borderRadius: 99 }} />
+                <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>
+                  Commentaires ({selectedTask.commentaires?.length || 0})
+                </h3>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, maxHeight: 240, overflowY: 'auto' }}>
+                {selectedTask.commentaires && selectedTask.commentaires.length > 0 ? (
+                  selectedTask.commentaires.map(c => (
+                    <div key={c.id} style={{ background: T.slate50, borderRadius: 12, padding: '11px 14px', border: `1px solid ${T.slate100}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 28, height: 28, background: T.blue600, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.white, fontWeight: 700, fontSize: 12 }}>
+                            {c.auteur_nom?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: T.blue600 }}>{c.auteur_nom}</span>
+                            <span style={{ fontSize: 10, color: T.slate400, marginLeft: 8 }}>
+                              {new Date(c.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => openEditComment(c)}
+                            style={{ background: T.blue50, border: 'none', color: T.blue600, cursor: 'pointer', fontSize: 11, padding: '3px 7px', borderRadius: 6, fontWeight: 600 }}>Modifier</button>
+                          <button onClick={() => handleDeleteComment(c.id, selectedTask.id)}
+                            style={{ background: T.rose50, border: 'none', color: T.rose, cursor: 'pointer', fontSize: 11, padding: '3px 7px', borderRadius: 6, fontWeight: 600 }}>Supprimer</button>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 13, color: T.slate700, margin: 0, lineHeight: 1.5, wordBreak: 'break-word' }}>{c.texte}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ textAlign: 'center', padding: 24, background: T.slate50, borderRadius: 12 }}>
+                    <span style={{ fontSize: 28 }}>💬</span>
+                    <p style={{ color: T.slate400, fontSize: 13, margin: '8px 0 0' }}>Aucun commentaire</p>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
+                  placeholder="Ajouter un commentaire..." onKeyDown={e => { if (e.key === 'Enter') handleAddComment(selectedTask.id); }}
+                  style={{ ...inputSx, flex: 1, fontSize: 13, padding: '9px 12px' }} />
+                <button onClick={() => handleAddComment(selectedTask.id)} disabled={!newComment.trim()}
+                  style={{ padding: '9px 16px', background: newComment.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: newComment.trim() ? 'pointer' : 'not-allowed' }}>
+                  Envoyer
+                </button>
+              </div>
+            </div>
+
             {isChef && (
-              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={() => handleDelete(selectedTask.id)} style={{ padding: '8px 16px', background: '#fff1f2', color: '#be123c', border: '1.5px solid #fecdd3', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.slate100}`, display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={() => handleDelete(selectedTask.id)}
+                  style={{ padding: '8px 16px', background: T.rose50, color: T.rose, border: `1px solid ${T.roseMid}`, borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   🗑️ Supprimer la tâche
                 </button>
               </div>
@@ -1207,62 +846,111 @@ export default function TasksList() {
         </div>
       )}
 
+      {/* ===================== MODAL CRÉATION ===================== */}
+      {showCreateModal && (
+        <div style={overlayStyle} onClick={() => setShowCreateModal(false)}>
+          <div style={{ ...modalStyle, maxWidth: 520, padding: 28 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: T.slate900 }}>Nouvelle tâche</h2>
+              <button onClick={() => setShowCreateModal(false)} style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: 'pointer', color: T.slate500 }}>×</button>
+            </div>
+            {formError && <div style={{ padding: '10px 14px', background: T.rose50, border: `1px solid ${T.roseMid}`, borderRadius: 8, color: T.rose, fontSize: 13, marginBottom: 16 }}>⚠️ {formError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { label: 'Titre *', type: 'text', placeholder: 'Ex: Maquette page accueil', key: 'titre' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>{f.label}</label>
+                  <input type={f.type} placeholder={f.placeholder} value={(form as any)[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={inputSx} />
+                </div>
+              ))}
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Description</label>
+                <textarea placeholder="Décrivez la tâche..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} style={{ ...inputSx, resize: 'none' }} />
+              </div>
+              {[
+                { label: 'Projet *', key: 'projet_id', options: projects.map(p => ({ value: p.id, label: p.nom_projet })) },
+                { label: 'Assigné à *', key: 'assigne_a', options: usersList.map(u => ({ value: u.id, label: `${u.nom_complet}${u.role === 'chef_projet' ? ' (Chef)' : ''}` })) },
+                { label: 'Priorité', key: 'priorite', options: [{ value: 'haute', label: 'Haute' }, { value: 'moyenne', label: 'Moyenne' }, { value: 'faible', label: 'Basse' }] },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>{f.label}</label>
+                  <select value={(form as any)[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={{ ...inputSx, cursor: 'pointer' }}>
+                    {f.key !== 'priorite' && <option value="">-- Sélectionner --</option>}
+                    {f.options.map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date début</label>
+                  <input type="date" value={form.date_debut} onChange={e => setForm({ ...form, date_debut: e.target.value })} style={inputSx} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date échéance *</label>
+                  <input type="date" value={form.date_echeance} onChange={e => setForm({ ...form, date_echeance: e.target.value })} style={inputSx} />
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setShowCreateModal(false)}
+                style={{ flex: 1, padding: '11px', border: `1px solid ${T.slate300}`, borderRadius: 10, background: T.white, color: T.slate600, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleCreateTask} disabled={formLoading}
+                style={{ flex: 1, padding: '11px', background: formLoading ? T.slate300 : `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: formLoading ? 'not-allowed' : 'pointer' }}>
+                {formLoading ? 'Création...' : 'Créer la tâche'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===================== MODAL MODIFICATION TÂCHE ===================== */}
       {showEditModal && editForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setShowEditModal(false)}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '520px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>✏️ Modifier la tâche</h2>
-              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        <div style={overlayStyle} onClick={() => setShowEditModal(false)}>
+          <div style={{ ...modalStyle, maxWidth: 520, padding: 28 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: T.slate900 }}>Modifier la tâche</h2>
+              <button onClick={() => setShowEditModal(false)} style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: 'pointer', color: T.slate500 }}>×</button>
             </div>
-
-            {editError && (
-              <div style={{ padding: '10px 14px', background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: '10px', color: '#c53030', fontSize: '13px', marginBottom: '16px' }}>
-                ⚠️ {editError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {editError && <div style={{ padding: '10px 14px', background: T.rose50, border: `1px solid ${T.roseMid}`, borderRadius: 8, color: T.rose, fontSize: 13, marginBottom: 16 }}>⚠️ {editError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Titre <span style={{ color: '#ef4444' }}>*</span></label>
-                <input type="text" value={editForm.titre} onChange={(e) => setEditForm({ ...editForm, titre: e.target.value })} style={inputStyle} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Titre *</label>
+                <input type="text" value={editForm.titre} onChange={e => setEditForm({ ...editForm, titre: e.target.value })} style={inputSx} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Description</label>
-                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} style={{ ...inputStyle, resize: 'none' }} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Description</label>
+                <textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} rows={3} style={{ ...inputSx, resize: 'none' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Assigné à</label>
-                <select value={editForm.assigne_a} onChange={(e) => setEditForm({ ...editForm, assigne_a: parseInt(e.target.value) })} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  {usersList.map((u) => (
-                    <option key={u.id} value={u.id}>{u.nom_complet} {u.role === 'chef_projet' ? '(Chef)' : ''}</option>
-                  ))}
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Assigné à</label>
+                <select value={editForm.assigne_a} onChange={e => setEditForm({ ...editForm, assigne_a: parseInt(e.target.value) })} style={{ ...inputSx, cursor: 'pointer' }}>
+                  {usersList.map(u => <option key={u.id} value={u.id}>{u.nom_complet}{u.role === 'chef_projet' ? ' (Chef)' : ''}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Priorité</label>
-                  <select value={editForm.priorite} onChange={(e) => setEditForm({ ...editForm, priorite: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    <option value="haute">Haute</option>
-                    <option value="moyenne">Moyenne</option>
-                    <option value="faible">Basse</option>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Priorité</label>
+                  <select value={editForm.priorite} onChange={e => setEditForm({ ...editForm, priorite: e.target.value })} style={{ ...inputSx, cursor: 'pointer' }}>
+                    <option value="haute">Haute</option><option value="moyenne">Moyenne</option><option value="faible">Basse</option>
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date de début</label>
-                  <input type="date" value={editForm.date_debut || ''} onChange={(e) => setEditForm({ ...editForm, date_debut: e.target.value })} style={inputStyle} />
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date début</label>
+                  <input type="date" value={editForm.date_debut || ''} onChange={e => setEditForm({ ...editForm, date_debut: e.target.value })} style={inputSx} />
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date d'échéance <span style={{ color: '#ef4444' }}>*</span></label>
-                <input type="date" value={editForm.date_echeance} onChange={(e) => setEditForm({ ...editForm, date_echeance: e.target.value })} style={inputStyle} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>Date échéance *</label>
+                <input type="date" value={editForm.date_echeance} onChange={e => setEditForm({ ...editForm, date_echeance: e.target.value })} style={inputSx} />
               </div>
             </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '1.5rem' }}>
-              <button onClick={() => setShowEditModal(false)} style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
-              <button onClick={handleEditTask} disabled={editLoading} style={{ flex: 1, padding: '11px', background: editLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer' }}>
-                {editLoading ? 'Modification...' : '💾 Enregistrer'}
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setShowEditModal(false)}
+                style={{ flex: 1, padding: '11px', border: `1px solid ${T.slate300}`, borderRadius: 10, background: T.white, color: T.slate600, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleEditTask} disabled={editLoading}
+                style={{ flex: 1, padding: '11px', background: editLoading ? T.slate300 : `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: editLoading ? 'not-allowed' : 'pointer' }}>
+                {editLoading ? 'Modification...' : 'Enregistrer'}
               </button>
             </div>
           </div>
@@ -1271,28 +959,19 @@ export default function TasksList() {
 
       {/* ===================== MODAL MODIFICATION COMMENTAIRE ===================== */}
       {showEditCommentModal && editingComment && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setShowEditCommentModal(false)}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '480px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>✏️ Modifier le commentaire</h2>
-              <button onClick={() => setShowEditCommentModal(false)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        <div style={overlayStyle} onClick={() => setShowEditCommentModal(false)}>
+          <div style={{ ...modalStyle, maxWidth: 460, padding: 28 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.slate900 }}>Modifier le commentaire</h2>
+              <button onClick={() => setShowEditCommentModal(false)} style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: 'pointer', color: T.slate500 }}>×</button>
             </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Commentaire</label>
-              <textarea
-                value={editCommentText}
-                onChange={(e) => setEditCommentText(e.target.value)}
-                rows={4}
-                style={{ ...inputStyle, resize: 'vertical' }}
-                autoFocus
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowEditCommentModal(false)} style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
-              <button onClick={handleEditComment} style={{ flex: 1, padding: '11px', background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-                💾 Enregistrer
+            <textarea value={editCommentText} onChange={e => setEditCommentText(e.target.value)} rows={4} style={{ ...inputSx, resize: 'vertical' }} autoFocus />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setShowEditCommentModal(false)}
+                style={{ flex: 1, padding: '11px', border: `1px solid ${T.slate300}`, borderRadius: 10, background: T.white, color: T.slate600, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleEditComment}
+                style={{ flex: 1, padding: '11px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                Enregistrer
               </button>
             </div>
           </div>
