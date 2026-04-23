@@ -20,7 +20,7 @@ import Calendar from './pages/Calendar';
 import UserProfiles from './pages/UserProfiles';
 import RiskAnalysis from './pages/Risk/RiskDashboard';
 import TeamPage from './pages/Team/TeamPage';
-import Chatbot from './components/Chatbot/Chatbot';
+import ChatWidget from './components/ChatWidget';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -80,8 +80,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
 
-      {/* ✅ Chatbot - En dehors des routes pour apparaître partout */}
-      <Chatbot />
+      <ChatWidget />
     </>
   );
 }
