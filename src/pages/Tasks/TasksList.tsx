@@ -5,8 +5,11 @@ import { useAuth } from '../../context/AuthContext';
 // ===================== INTERFACES =====================
 interface SubTask {
   id: number;
+  tache_id: number;
   titre: string;
   termine: boolean;
+  created_by: number;
+  createur_nom?: string;
 }
 
 interface Comment {
@@ -57,7 +60,7 @@ const T = {
   blue600: '#1e40af', blue400: '#60a5fa', blue100: '#dbeafe', blue50: '#eff6ff',
   slate900: '#0f172a', slate700: '#334155', slate600: '#475569',
   slate500: '#64748b', slate400: '#94a3b8', slate300: '#cbd5e1',
-  slate100: '#f1f5f9', slate50: '#f8fafc', white: '#ffffff',
+  slate200: '#e2e8f0', slate100: '#f1f5f9', slate50: '#f8fafc', white: '#ffffff',
   rose: '#e11d48', rose50: '#fff1f2', roseMid: '#fecdd3',
   amber: '#b45309', amber50: '#fffbeb', amberMid: '#fde68a',
   green: '#15803d', green50: '#f0fdf4', greenMid: '#bbf7d0',
@@ -91,15 +94,7 @@ const inputSx: React.CSSProperties = {
   background: T.white, outline: 'none', boxSizing: 'border-box',
 };
 
-// ── Subtask storage (localStorage per task) ──────────────
-const STORAGE_KEY = (taskId: number) => `subtasks_task_${taskId}`;
-const loadSubtasks = (taskId: number): SubTask[] => {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY(taskId)) || '[]'); }
-  catch { return []; }
-};
-const saveSubtasks = (taskId: number, subtasks: SubTask[]) => {
-  localStorage.setItem(STORAGE_KEY(taskId), JSON.stringify(subtasks));
-};
+// ── calcProgression ───────────────────────────────────────
 const calcProgression = (subtasks: SubTask[]): number => {
   if (subtasks.length === 0) return 0;
   return Math.round((subtasks.filter(s => s.termine).length / subtasks.length) * 100);
@@ -144,7 +139,7 @@ export default function TasksList() {
   });
 
   // ── Subtasks state ────────────────────────────────────
-  const [subtasks, setSubtasks]         = useState<SubTask[]>([]);
+  const [subtasks, setSubtasks]             = useState<SubTask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   // ── Fetch ─────────────────────────────────────────────
@@ -186,49 +181,76 @@ export default function TasksList() {
     }
   }, [highlightTaskId, tasks]);
 
-  // ── Subtask helpers ───────────────────────────────────
-  const loadTaskSubtasks = (taskId: number) => {
-    const loaded = loadSubtasks(taskId);
-    setSubtasks(loaded);
-    // Sync avancement avec subtasks si subtasks existent
-    if (loaded.length > 0) {
-      const prog = calcProgression(loaded);
-      setTempProgression(prog);
-      setTempStatut(prog === 100 ? 'termine' : prog > 0 ? 'en_cours' : 'a_faire');
-    }
+  // ── Fetch sous-tâches من DB ───────────────────────────
+  const fetchSubtasks = async (taskId: number) => {
+    try {
+      const r = await fetch(
+        `${API_URL}/projets/taches/${taskId}/sous-taches`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      if (d.success) {
+        setSubtasks(d.sous_taches);
+        if (d.sous_taches.length > 0) {
+          const prog = calcProgression(d.sous_taches);
+          setTempProgression(prog);
+          setTempStatut(prog === 100 ? 'termine' : prog > 0 ? 'en_cours' : 'a_faire');
+        }
+      }
+    } catch (e) { console.error(e); }
   };
 
-  const addSubtask = () => {
+  // ── Add sous-tâche — المظف بس ─────────────────────────
+  const addSubtask = async () => {
     if (!newSubtaskTitle.trim() || !selectedTask) return;
-    const newSt: SubTask = { id: Date.now(), titre: newSubtaskTitle.trim(), termine: false };
-    const updated = [...subtasks, newSt];
-    setSubtasks(updated);
-    saveSubtasks(selectedTask.id, updated);
-    setNewSubtaskTitle('');
-    syncProgressionFromSubtasks(updated);
+    try {
+      const r = await fetch(
+        `${API_URL}/projets/taches/${selectedTask.id}/sous-taches`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titre: newSubtaskTitle.trim() }),
+        }
+      );
+      const d = await r.json();
+      if (d.success) {
+        setNewSubtaskTitle('');
+        await fetchSubtasks(selectedTask.id);
+        fetchTasks(); // ✅ refresh القائمة
+      } else { alert(d.message); }
+    } catch (e) { alert('Erreur connexion'); }
   };
 
-  const toggleSubtask = (id: number) => {
+  // ── Toggle sous-tâche — المظف بس ─────────────────────
+  const toggleSubtask = async (subtaskId: number) => {
     if (!selectedTask) return;
-    const updated = subtasks.map(s => s.id === id ? { ...s, termine: !s.termine } : s);
-    setSubtasks(updated);
-    saveSubtasks(selectedTask.id, updated);
-    syncProgressionFromSubtasks(updated);
+    try {
+      const r = await fetch(
+        `${API_URL}/projets/taches/${selectedTask.id}/sous-taches/${subtaskId}/toggle`,
+        { method: 'PUT', headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      if (d.success) {
+        await fetchSubtasks(selectedTask.id);
+        fetchTasks(); // ✅ الـ % يتحدث في القائمة مباشرة
+      }
+    } catch (e) { alert('Erreur connexion'); }
   };
 
-  const deleteSubtask = (id: number) => {
+  // ── Delete sous-tâche — المظف بس ─────────────────────
+  const deleteSubtask = async (subtaskId: number) => {
     if (!selectedTask) return;
-    const updated = subtasks.filter(s => s.id !== id);
-    setSubtasks(updated);
-    saveSubtasks(selectedTask.id, updated);
-    syncProgressionFromSubtasks(updated);
-  };
-
-  const syncProgressionFromSubtasks = (subs: SubTask[]) => {
-    if (subs.length === 0) return;
-    const prog = calcProgression(subs);
-    setTempProgression(prog);
-    setTempStatut(prog === 100 ? 'termine' : prog > 0 ? 'en_cours' : 'a_faire');
+    try {
+      const r = await fetch(
+        `${API_URL}/projets/taches/${selectedTask.id}/sous-taches/${subtaskId}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      if (d.success) {
+        await fetchSubtasks(selectedTask.id);
+        fetchTasks();
+      }
+    } catch (e) { alert('Erreur connexion'); }
   };
 
   // ── CRUD tasks ────────────────────────────────────────
@@ -292,7 +314,6 @@ export default function TasksList() {
         body: JSON.stringify({ progression: tempProgression }),
       });
       if (!r.ok) throw new Error('Erreur sauvegarde');
-      // Sync statut aussi
       await fetch(`${API_URL}/projets/taches/${selectedTask.id}/status`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -371,7 +392,8 @@ export default function TasksList() {
         if (t.date_debut) t.date_debut = new Date(t.date_debut).toISOString().split('T')[0];
         if (t.date_echeance) t.date_echeance = new Date(t.date_echeance).toISOString().split('T')[0];
         setSelectedTask(t); setTempStatut(t.statut); setTempProgression(t.progression);
-        loadTaskSubtasks(taskId);
+        // ✅ جيب الـ sous-tâches من DB
+        await fetchSubtasks(taskId);
         setShowDetailModal(true); setNewComment('');
       }
     } catch (e) { console.error(e); }
@@ -433,7 +455,6 @@ export default function TasksList() {
     </div>
   );
 
-  // ── Modal overlay style ───────────────────────────────
   const overlayStyle: React.CSSProperties = {
     position: 'fixed', inset: 0, background: 'rgba(15,23,42,.65)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
@@ -502,22 +523,12 @@ export default function TasksList() {
                 const sc = statusStyle[t.statut] || { bg: T.slate100, color: T.slate500 };
                 const pc = priorityStyle[t.priorite] || { bg: T.slate100, color: T.slate500 };
                 const isHighlighted = highlightedTask === t.id;
-                const taskSubtasks = loadSubtasks(t.id);
-                const hasSubs = taskSubtasks.length > 0;
-                const subsDone = taskSubtasks.filter(s => s.termine).length;
                 return (
                   <tr key={t.id} ref={isHighlighted ? highlightedRowRef : null} className="trow"
                     style={{ borderBottom: `1px solid ${T.slate50}`, animation: isHighlighted ? 'highlightPulse 1s ease 3' : 'none' }}>
                     <td style={{ padding: '13px 16px' }}>
                       <p style={{ fontWeight: 700, color: T.slate900, margin: 0, cursor: 'pointer' }} onClick={() => openDetail(t.id)}>{t.titre}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                        <span style={{ fontSize: 10, color: T.slate400 }}>T-{t.id}</span>
-                        {hasSubs && (
-                          <span style={{ fontSize: 10, fontWeight: 700, color: T.blue600, background: T.blue50, padding: '1px 6px', borderRadius: 20 }}>
-                            {subsDone}/{taskSubtasks.length} sous-tâches
-                          </span>
-                        )}
-                      </div>
+                      <span style={{ fontSize: 10, color: T.slate400 }}>T-{t.id}</span>
                     </td>
                     <td style={{ padding: '13px 16px' }}>
                       <Link to={`/projects/${t.projet_id}`} style={{ color: T.blue600, fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
@@ -541,18 +552,12 @@ export default function TasksList() {
                       </select>
                     </td>
                     <td style={{ padding: '13px 16px', minWidth: 130 }}>
+                      {/* ✅ الـ progression يجي من DB مباشرة */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {hasSubs
-                          ? <SubtaskRing done={subsDone} total={taskSubtasks.length} />
-                          : (
-                            <>
-                              <div style={{ flex: 1, height: 5, background: T.slate100, borderRadius: 99, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${t.progression}%`, background: t.progression === 100 ? T.green : T.blue600, borderRadius: 99 }} />
-                              </div>
-                              <span style={{ fontSize: 11, color: T.slate400, minWidth: 28 }}>{t.progression}%</span>
-                            </>
-                          )
-                        }
+                        <div style={{ flex: 1, height: 5, background: T.slate100, borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${t.progression}%`, background: t.progression === 100 ? T.green : T.blue600, borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: T.slate400, minWidth: 28 }}>{t.progression}%</span>
                       </div>
                     </td>
                     <td style={{ padding: '13px 16px', color: T.slate400, fontSize: 12 }}>
@@ -634,9 +639,7 @@ export default function TasksList() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 3, height: 16, background: T.blue600, borderRadius: 99 }} />
-                  <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>
-                    Sous-tâches
-                  </h3>
+                  <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>Sous-tâches</h3>
                   <span style={{ fontSize: 11, fontWeight: 700, background: T.blue50, color: T.blue600, padding: '2px 8px', borderRadius: 20 }}>
                     {subtasks.filter(s => s.termine).length}/{subtasks.length}
                   </span>
@@ -655,38 +658,60 @@ export default function TasksList() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
                 {subtasks.length === 0 ? (
                   <p style={{ textAlign: 'center', color: T.slate400, fontSize: 12, padding: '12px 0', margin: 0 }}>
-                    Aucune sous-tâche — ajoutez-en ci-dessous
+                    {isChef ? '👁️ Aucune sous-tâche pour cette tâche' : 'Aucune sous-tâche — ajoutez-en ci-dessous'}
                   </p>
                 ) : subtasks.map(s => (
                   <div key={s.id} className="subtask-row fu" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: T.white, borderRadius: 10, border: `1px solid ${s.termine ? T.greenMid : T.slate200}`, transition: 'all .15s' }}>
-                    <button className="subtask-check" onClick={() => toggleSubtask(s.id)}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${s.termine ? T.green : T.slate300}`, background: s.termine ? T.green : T.white, color: T.white, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, fontSize: 12, fontWeight: 700 }}>
+                    {/* ✅ Checkbox — المظف بس يتفاعل */}
+                    <button
+                      className="subtask-check"
+                      onClick={() => !isChef && toggleSubtask(s.id)}
+                      style={{
+                        width: 22, height: 22, borderRadius: 6,
+                        border: `2px solid ${s.termine ? T.green : T.slate300}`,
+                        background: s.termine ? T.green : T.white,
+                        color: T.white, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: isChef ? 'default' : 'pointer',
+                        flexShrink: 0, fontSize: 12, fontWeight: 700,
+                        opacity: isChef ? 0.6 : 1,
+                      }}>
                       {s.termine ? '✓' : ''}
                     </button>
                     <span style={{ flex: 1, fontSize: 13, color: s.termine ? T.slate400 : T.slate900, fontWeight: s.termine ? 400 : 500, textDecoration: s.termine ? 'line-through' : 'none' }}>
                       {s.titre}
                     </span>
-                    <button onClick={() => deleteSubtask(s.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.slate400, fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>✕</button>
+                    {/* ✅ زر حذف — المظف بس */}
+                    {!isChef && (
+                      <button onClick={() => deleteSubtask(s.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.slate400, fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>✕</button>
+                    )}
                   </div>
                 ))}
               </div>
 
-              {/* Add subtask */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input type="text" value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)}
-                  placeholder="Nouvelle sous-tâche..."
-                  onKeyDown={e => { if (e.key === 'Enter') addSubtask(); }}
-                  style={{ ...inputSx, flex: 1, fontSize: 13, padding: '8px 12px' }} />
-                <button onClick={addSubtask} disabled={!newSubtaskTitle.trim()}
-                  style={{ padding: '8px 16px', background: newSubtaskTitle.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: newSubtaskTitle.trim() ? 'pointer' : 'not-allowed' }}>
-                  + Ajouter
-                </button>
-              </div>
-
-              {subtasks.length > 0 && (
-                <p style={{ margin: '8px 0 0', fontSize: 11, color: T.blue600, fontWeight: 600 }}>
-                  💡 L'avancement se calcule automatiquement selon vos sous-tâches
+              {/* ✅ Input إضافة — المظف بس */}
+              {!isChef ? (
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input type="text" value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)}
+                      placeholder="Nouvelle sous-tâche..."
+                      onKeyDown={e => { if (e.key === 'Enter') addSubtask(); }}
+                      style={{ ...inputSx, flex: 1, fontSize: 13, padding: '8px 12px' }} />
+                    <button onClick={addSubtask} disabled={!newSubtaskTitle.trim()}
+                      style={{ padding: '8px 16px', background: newSubtaskTitle.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: newSubtaskTitle.trim() ? 'pointer' : 'not-allowed' }}>
+                      + Ajouter
+                    </button>
+                  </div>
+                  {subtasks.length > 0 && (
+                    <p style={{ margin: '8px 0 0', fontSize: 11, color: T.blue600, fontWeight: 600 }}>
+                      💡 L'avancement se calcule automatiquement selon vos sous-tâches
+                    </p>
+                  )}
+                </div>
+              ) : (
+                // ✅ الشيف يشوف رسالة بس
+                <p style={{ margin: '8px 0 0', fontSize: 11, color: T.slate500, fontStyle: 'italic', textAlign: 'center', padding: '8px', background: T.white, borderRadius: 8, border: `1px dashed ${T.slate200}` }}>
+                  👁️ Les sous-tâches sont gérées uniquement par l'employé
                 </p>
               )}
             </div>
@@ -698,7 +723,6 @@ export default function TasksList() {
                 <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>Avancement de la tâche</h3>
               </div>
 
-              {/* Statut buttons */}
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: T.slate500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.6px' }}>Statut</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
@@ -708,7 +732,7 @@ export default function TasksList() {
                     return (
                       <button key={s.value} type="button"
                         onClick={() => {
-                          if (subtasks.length > 0) return; // subtasks control avancement
+                          if (subtasks.length > 0) return;
                           setTempStatut(s.value);
                           if (s.value === 'termine') setTempProgression(100);
                           else if (s.value === 'en_cours' && tempProgression === 0) setTempProgression(25);
@@ -727,7 +751,6 @@ export default function TasksList() {
                 )}
               </div>
 
-              {/* Progression display */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.slate500, textTransform: 'uppercase', letterSpacing: '.6px' }}>Avancement</label>
@@ -735,7 +758,6 @@ export default function TasksList() {
                 </div>
 
                 {subtasks.length > 0 ? (
-                  // Subtask-driven progress bar (not interactive)
                   <div>
                     <div style={{ height: 10, background: T.slate100, borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
                       <div style={{ height: '100%', width: `${tempProgression}%`, background: tempProgression === 100 ? T.green : T.blue600, borderRadius: 99, transition: 'width .5s ease' }} />
@@ -750,7 +772,6 @@ export default function TasksList() {
                     </p>
                   </div>
                 ) : (
-                  // Manual slider
                   <div>
                     <input type="range" min={0} max={100} step={1} value={tempProgression}
                       onChange={e => {
@@ -785,7 +806,7 @@ export default function TasksList() {
             {/* ── COMMENTAIRES ── */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <div style={{ width: 3, height: 16, background: T.purple ?? T.slate700, borderRadius: 99 }} />
+                <div style={{ width: 3, height: 16, background: T.slate700, borderRadius: 99 }} />
                 <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.slate900 }}>
                   Commentaires ({selectedTask.commentaires?.length || 0})
                 </h3>
@@ -856,9 +877,7 @@ export default function TasksList() {
             </div>
             {formError && <div style={{ padding: '10px 14px', background: T.rose50, border: `1px solid ${T.roseMid}`, borderRadius: 8, color: T.rose, fontSize: 13, marginBottom: 16 }}>⚠️ {formError}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[
-                { label: 'Titre *', type: 'text', placeholder: 'Ex: Maquette page accueil', key: 'titre' },
-              ].map(f => (
+              {[{ label: 'Titre *', type: 'text', placeholder: 'Ex: Maquette page accueil', key: 'titre' }].map(f => (
                 <div key={f.key}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.5px' }}>{f.label}</label>
                   <input type={f.type} placeholder={f.placeholder} value={(form as any)[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={inputSx} />
