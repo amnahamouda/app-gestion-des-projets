@@ -21,6 +21,7 @@ import Calendar from './pages/Calendar';
 import UserProfiles from './pages/UserProfiles';
 import RiskAnalysis from './pages/Risk/RiskDashboard';
 import TeamPage from './pages/Team/TeamPage';
+import PlatformSettings from './pages/PlatformSettings';
 import ChatWidget from './components/ChatWidget';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,8 @@ export default function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/users"    element={<AdminRoute><UsersList /></AdminRoute>} />
           <Route path="/profile"  element={<UserProfiles />} />
+           <Route path="settings" element={<PlatformSettings />} />
+          <Route path="settings/platform" element={<PlatformSettings />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

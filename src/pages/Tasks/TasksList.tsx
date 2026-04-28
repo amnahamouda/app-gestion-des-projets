@@ -7,6 +7,7 @@ interface SubTask {
   id: number;
   tache_id: number;
   titre: string;
+  description?: string;
   termine: boolean;
   created_by: number;
   createur_nom?: string;
@@ -141,7 +142,11 @@ export default function TasksList() {
   // ── Subtasks state ────────────────────────────────────
   const [subtasks, setSubtasks]             = useState<SubTask[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-
+  const [newSubtaskDescription, setNewSubtaskDescription] = useState('');
+  const [editingSubtask, setEditingSubtask] = useState<SubTask | null>(null);
+  const [showEditSubtaskModal, setShowEditSubtaskModal] = useState(false);
+  const [editSubtaskTitle, setEditSubtaskTitle] = useState('');
+  const [editSubtaskDescription, setEditSubtaskDescription] = useState('');
   // ── Fetch ─────────────────────────────────────────────
   const fetchTasks = async () => {
     try {
@@ -209,12 +214,18 @@ export default function TasksList() {
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titre: newSubtaskTitle.trim() }),
+          body: JSON.stringify({ 
+          titre: newSubtaskTitle.trim(),
+          description: newSubtaskDescription.trim() || null  
+           }),
+          
+          
         }
       );
       const d = await r.json();
       if (d.success) {
         setNewSubtaskTitle('');
+        setNewSubtaskDescription(''); 
         await fetchSubtasks(selectedTask.id);
         fetchTasks(); // ✅ refresh القائمة
       } else { alert(d.message); }
@@ -237,6 +248,29 @@ export default function TasksList() {
     } catch (e) { alert('Erreur connexion'); }
   };
 
+const updateSubtask = async () => {
+  if (!editingSubtask || !editSubtaskTitle.trim()) return;
+  try {
+    const r = await fetch(
+      `${API_URL}/projets/taches/${selectedTask!.id}/sous-taches/${editingSubtask.id}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          titre: editSubtaskTitle.trim(),
+          description: editSubtaskDescription.trim() || null
+        }),
+      }
+    );
+    const d = await r.json();
+    if (d.success) {
+      setShowEditSubtaskModal(false);
+      setEditingSubtask(null);
+      await fetchSubtasks(selectedTask!.id);
+      fetchTasks();
+    } else { alert(d.message); }
+  } catch (e) { alert('Erreur connexion'); }
+};
   // ── Delete sous-tâche — المظف بس ─────────────────────
   const deleteSubtask = async (subtaskId: number) => {
     if (!selectedTask) return;
@@ -654,66 +688,161 @@ export default function TasksList() {
                 )}
               </div>
 
-              {/* List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
-                {subtasks.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: T.slate400, fontSize: 12, padding: '12px 0', margin: 0 }}>
-                    {isChef ? '👁️ Aucune sous-tâche pour cette tâche' : 'Aucune sous-tâche — ajoutez-en ci-dessous'}
-                  </p>
-                ) : subtasks.map(s => (
-                  <div key={s.id} className="subtask-row fu" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: T.white, borderRadius: 10, border: `1px solid ${s.termine ? T.greenMid : T.slate200}`, transition: 'all .15s' }}>
-                    {/* ✅ Checkbox — المظف بس يتفاعل */}
-                    <button
-                      className="subtask-check"
-                      onClick={() => !isChef && toggleSubtask(s.id)}
-                      style={{
-                        width: 22, height: 22, borderRadius: 6,
-                        border: `2px solid ${s.termine ? T.green : T.slate300}`,
-                        background: s.termine ? T.green : T.white,
-                        color: T.white, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: isChef ? 'default' : 'pointer',
-                        flexShrink: 0, fontSize: 12, fontWeight: 700,
-                        opacity: isChef ? 0.6 : 1,
-                      }}>
-                      {s.termine ? '✓' : ''}
-                    </button>
-                    <span style={{ flex: 1, fontSize: 13, color: s.termine ? T.slate400 : T.slate900, fontWeight: s.termine ? 400 : 500, textDecoration: s.termine ? 'line-through' : 'none' }}>
-                      {s.titre}
-                    </span>
-                    {/* ✅ زر حذف — المظف بس */}
-                    {!isChef && (
-                      <button onClick={() => deleteSubtask(s.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.slate400, fontSize: 14, padding: '2px 4px', borderRadius: 4 }}>✕</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {/* List des sous-tâches */}
+<div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, maxHeight: 200, overflowY: 'auto' }}>
+  {subtasks.length === 0 ? (
+    <p style={{ textAlign: 'center', color: T.slate400, fontSize: 12, padding: '12px 0', margin: 0 }}>
+      {isChef ? '👁️ Aucune sous-tâche pour cette tâche' : 'Aucune sous-tâche — ajoutez-en ci-dessous'}
+    </p>
+  ) : subtasks.map(s => (
+    <div key={s.id} className="subtask-row fu" style={{ 
+      display: 'flex', 
+      flexDirection: 'column',
+      padding: '9px 12px', 
+      background: T.white, 
+      borderRadius: 10, 
+      border: `1px solid ${s.termine ? T.greenMid : T.slate200}`, 
+      transition: 'all .15s' 
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Checkbox */}
+        <button
+          className="subtask-check"
+          onClick={() => !isChef && toggleSubtask(s.id)}
+          style={{
+            width: 22, height: 22, borderRadius: 6,
+            border: `2px solid ${s.termine ? T.green : T.slate300}`,
+            background: s.termine ? T.green : T.white,
+            color: T.white, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: isChef ? 'default' : 'pointer',
+            flexShrink: 0, fontSize: 12, fontWeight: 700,
+            opacity: isChef ? 0.6 : 1,
+          }}>
+          {s.termine ? '✓' : ''}
+        </button>
+        
+        {/* Titre */}
+        <span style={{ 
+          flex: 1, 
+          fontSize: 13, 
+          color: s.termine ? T.slate400 : T.slate900, 
+          fontWeight: s.termine ? 400 : 500, 
+          textDecoration: s.termine ? 'line-through' : 'none' 
+        }}>
+          {s.titre}
+        </span>
+        
+        {/* Actions */}
+        {!isChef && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {/* ⭐ Bouton modifier */}
+            <button 
+              onClick={() => {
+                setEditingSubtask(s);
+                setEditSubtaskTitle(s.titre);
+                setEditSubtaskDescription(s.description || '');
+                setShowEditSubtaskModal(true);
+              }}
+              style={{ 
+                background: T.blue50, 
+                border: 'none', 
+                cursor: 'pointer', 
+                color: T.blue600, 
+                fontSize: 12, 
+                padding: '2px 8px', 
+                borderRadius: 4,
+                fontWeight: 600
+              }}>
+              ✏️
+            </button>
+            {/* Bouton supprimer */}
+            <button 
+              onClick={() => deleteSubtask(s.id)}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                cursor: 'pointer', 
+                color: T.slate400, 
+                fontSize: 14, 
+                padding: '2px 4px', 
+                borderRadius: 4 
+              }}>✕</button>
+          </div>
+        )}
+      </div>
+      
+      {/* ⭐ Affichage de la description si elle existe */}
+      {s.description && (
+        <div style={{ 
+          marginTop: 6, 
+          marginLeft: 32, 
+          fontSize: 11, 
+          color: T.slate500,
+          padding: '4px 8px',
+          background: T.slate50,
+          borderRadius: 6,
+          borderLeft: `2px solid ${T.blue400}`
+        }}>
+          📝 {s.description}
+        </div>
+      )}
+    </div>
+  ))}
+</div>
 
-              {/* ✅ Input إضافة — المظف بس */}
-              {!isChef ? (
-                <div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input type="text" value={newSubtaskTitle} onChange={e => setNewSubtaskTitle(e.target.value)}
-                      placeholder="Nouvelle sous-tâche..."
-                      onKeyDown={e => { if (e.key === 'Enter') addSubtask(); }}
-                      style={{ ...inputSx, flex: 1, fontSize: 13, padding: '8px 12px' }} />
-                    <button onClick={addSubtask} disabled={!newSubtaskTitle.trim()}
-                      style={{ padding: '8px 16px', background: newSubtaskTitle.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, color: T.white, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: newSubtaskTitle.trim() ? 'pointer' : 'not-allowed' }}>
-                      + Ajouter
-                    </button>
-                  </div>
-                  {subtasks.length > 0 && (
-                    <p style={{ margin: '8px 0 0', fontSize: 11, color: T.blue600, fontWeight: 600 }}>
-                      💡 L'avancement se calcule automatiquement selon vos sous-tâches
-                    </p>
-                  )}
-                </div>
-              ) : (
-                // ✅ الشيف يشوف رسالة بس
-                <p style={{ margin: '8px 0 0', fontSize: 11, color: T.slate500, fontStyle: 'italic', textAlign: 'center', padding: '8px', background: T.white, borderRadius: 8, border: `1px dashed ${T.slate200}` }}>
-                  👁️ Les sous-tâches sont gérées uniquement par l'employé
-                </p>
-              )}
+{/* Input إضافة sous-tâche avec description */}
+{!isChef ? (
+  <div>
+    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <input 
+        type="text" 
+        value={newSubtaskTitle} 
+        onChange={e => setNewSubtaskTitle(e.target.value)}
+        placeholder="Titre de la sous-tâche..."
+        onKeyDown={e => { if (e.key === 'Enter') addSubtask(); }}
+        style={{ ...inputSx, flex: 1, fontSize: 13, padding: '8px 12px' }} 
+      />
+      <button 
+        onClick={addSubtask} 
+        disabled={!newSubtaskTitle.trim()}
+        style={{ 
+          padding: '8px 16px', 
+          background: newSubtaskTitle.trim() ? `linear-gradient(135deg, ${T.navy950}, ${T.blue600})` : T.slate300, 
+          color: T.white, 
+          border: 'none', 
+          borderRadius: 10, 
+          fontSize: 13, 
+          fontWeight: 700, 
+          cursor: newSubtaskTitle.trim() ? 'pointer' : 'not-allowed' 
+        }}>
+        + Ajouter
+      </button>
+    </div>
+    {/* ⭐ Champ description */}
+    <textarea
+      value={newSubtaskDescription}
+      onChange={e => setNewSubtaskDescription(e.target.value)}
+      placeholder="Description (optionnelle)..."
+      rows={2}
+      style={{ 
+        ...inputSx, 
+        fontSize: 12, 
+        padding: '8px 12px', 
+        resize: 'vertical',
+        marginBottom: 8
+      }}
+    />
+    {subtasks.length > 0 && (
+      <p style={{ margin: '8px 0 0', fontSize: 11, color: T.blue600, fontWeight: 600 }}>
+        💡 L'avancement se calcule automatiquement selon vos sous-tâches
+      </p>
+    )}
+  </div>
+) : (
+  <p style={{ margin: '8px 0 0', fontSize: 11, color: T.slate500, fontStyle: 'italic', textAlign: 'center', padding: '8px', background: T.white, borderRadius: 8, border: `1px dashed ${T.slate200}` }}>
+    👁️ Les sous-tâches sont gérées uniquement par l'employé
+  </p>
+)}
             </div>
 
             {/* ── AVANCEMENT ── */}
@@ -975,6 +1104,51 @@ export default function TasksList() {
           </div>
         </div>
       )}
+      {/* Modal modification sous-tâche */}
+{showEditSubtaskModal && editingSubtask && (
+  <div style={overlayStyle} onClick={() => setShowEditSubtaskModal(false)}>
+    <div style={{ ...modalStyle, maxWidth: 460, padding: 28 }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: T.slate900 }}>Modifier sous-tâche</h2>
+        <button onClick={() => setShowEditSubtaskModal(false)} 
+          style={{ background: T.slate100, border: 'none', borderRadius: 8, width: 32, height: 32, fontSize: 18, cursor: 'pointer', color: T.slate500 }}>×</button>
+      </div>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6 }}>Titre *</label>
+          <input 
+            type="text" 
+            value={editSubtaskTitle} 
+            onChange={e => setEditSubtaskTitle(e.target.value)} 
+            style={inputSx} 
+          />
+        </div>
+        
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.slate600, marginBottom: 6 }}>Description</label>
+          <textarea 
+            value={editSubtaskDescription} 
+            onChange={e => setEditSubtaskDescription(e.target.value)} 
+            rows={3} 
+            style={{ ...inputSx, resize: 'vertical' }} 
+          />
+        </div>
+      </div>
+      
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button onClick={() => setShowEditSubtaskModal(false)}
+          style={{ flex: 1, padding: '11px', border: `1px solid ${T.slate300}`, borderRadius: 10, background: T.white, color: T.slate600, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          Annuler
+        </button>
+        <button onClick={updateSubtask}
+          style={{ flex: 1, padding: '11px', background: `linear-gradient(135deg, ${T.navy950}, ${T.blue600})`, color: T.white, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ===================== MODAL MODIFICATION COMMENTAIRE ===================== */}
       {showEditCommentModal && editingComment && (

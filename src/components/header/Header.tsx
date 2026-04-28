@@ -141,6 +141,7 @@ const Header: React.FC<HeaderProps> = ({ onClick, onToggle }) => {
                   <span> ⌘ </span>
                   <span> K </span>
                 </button>
+                
               </div>
             </form>
           </div>

@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import PageBreadcrumb from '../components/common/PageBreadCrumb';
 import PageMeta from '../components/common/PageMeta';
+import axios from 'axios';
 
 /* ─── styles ─── */
 const styles = `
@@ -183,12 +184,7 @@ const infoFields = [
   { label: 'Téléphone',     key: 'phone'      as const, type: 'tel'   },
 ];
 
-const activityItems = [
-  { label: 'Projet "Refonte Site" créé', time: "Aujourd'hui, 09:14", badge: 'Projet', bg: '#E6F1FB', color: '#0C447C' },
-  { label: 'Tâche validée par le chef',  time: 'Hier, 16:42',        badge: 'Tâche',  bg: '#EAF3DE', color: '#27500A' },
-  { label: 'Deadline dans 2 jours',      time: 'Avant-hier',         badge: 'Rappel', bg: '#FAEEDA', color: '#633806' },
-  { label: 'Profil complété à 80%',      time: 'Il y a 3 jours',     badge: 'Profil', bg: '#E6F1FB', color: '#0C447C' },
-];
+
 
 const defaultNotifs = [
   { label: 'Email — Nouveaux projets', sub: 'Recevoir un email à chaque assignation', on: true  },
@@ -240,24 +236,39 @@ function StrengthBar({ password }: { password: string }) {
 }
 
 export default function UserProfiles() {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuth(); // user فيه id تاع المستخدم
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [editing, setEditing]   = useState(false);
-  const [toast, setToast]       = useState('');
-  const [avatarSrc, setAvatar]  = useState('');
-  const [notifs, setNotifs]     = useState(defaultNotifs);
+  const [editing, setEditing] = useState(false);
+  const [toast, setToast] = useState('');
+  const [avatarSrc, setAvatar] = useState('');
+  const [notifs, setNotifs] = useState(defaultNotifs);
   const [showPwCur, setShowPwCur] = useState(false);
   const [showPwNew, setShowPwNew] = useState(false);
 
   const [form, setForm] = useState({
-    name:       user?.name       ?? '',
-    email:      user?.email      ?? '',
+    name: user?.name ?? '',
+    email: user?.email ?? '',
     department: user?.department ?? '',
-    phone:      '',
-    bio:        '',
+    phone: '',
+    bio: '',
   });
   const [pw, setPw] = useState({ cur: '', nw: '', conf: '' });
+
+  // ⭐⭐⭐ دالة لجلب مفتاح التخزين الخاص بالمستخدم ⭐⭐⭐
+  const getAvatarStorageKey = () => {
+    return `user_avatar_${user?.id}`; // كل مستخدم عنده مفتاح مختلف
+  };
+
+  // ⭐⭐⭐ نجيب الصورة من localStorage كي تتحل الصفحة (خاصة بالمستخدم) ⭐⭐⭐
+  useEffect(() => {
+    if (user?.id) {
+      const savedAvatar = localStorage.getItem(getAvatarStorageKey());
+      if (savedAvatar) {
+        setAvatar(savedAvatar);
+      }
+    }
+  }, [user?.id]);
 
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -272,22 +283,49 @@ export default function UserProfiles() {
 
   const savePw = () => {
     if (!pw.cur || !pw.nw || !pw.conf) return showToast('Remplissez tous les champs');
-    if (pw.nw !== pw.conf)              return showToast('Les mots de passe ne correspondent pas');
-    if (pw.nw.length < 8)              return showToast('Minimum 8 caractères requis');
+    if (pw.nw !== pw.conf) return showToast('Les mots de passe ne correspondent pas');
+    if (pw.nw.length < 8) return showToast('Minimum 8 caractères requis');
     setPw({ cur: '', nw: '', conf: '' });
     showToast('Mot de passe mis à jour');
   };
 
+  // ⭐⭐⭐ دالة تبديل الصورة - تحفظ الصورة في localStorage خاص بالمستخدم ⭐⭐⭐
   const handleImg = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // التحقق من حجم الصورة (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('L\'image ne doit pas dépasser 2 MB');
+      return;
+    }
+    
+    // التحقق من نوع الصورة
+    if (!file.type.startsWith('image/')) {
+      showToast('Seules les images sont acceptées');
+      return;
+    }
+    
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setAvatar(ev.target?.result as string);
+      const imageUrl = ev.target?.result as string;
+      setAvatar(imageUrl);
+      // ⭐ نحفظ الصورة في localStorage بالمفتاح الخاص بالمستخدم ⭐
+      localStorage.setItem(getAvatarStorageKey(), imageUrl);
       showToast('Photo de profil mise à jour');
     };
     reader.readAsDataURL(file);
   };
+
+  // ⭐⭐⭐ دالة حذف الصورة ⭐⭐⭐
+  const handleDeleteAvatar = () => {
+    if (!confirm('Voulez-vous vraiment supprimer votre photo de profil ?')) return;
+    setAvatar('');
+    // ⭐ نحذف الصورة الخاصة بالمستخدم فقط ⭐
+    localStorage.removeItem(getAvatarStorageKey());
+    showToast('Photo de profil supprimée');
+  };
+
 
   return (
     <>
@@ -296,7 +334,6 @@ export default function UserProfiles() {
       <PageBreadcrumb pageTitle="Mon profil" />
 
       <div className="pp">
-
         {toast && (
           <div className="pp-toast">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -307,17 +344,18 @@ export default function UserProfiles() {
           </div>
         )}
 
-        {/* ── Hero ── */}
+        {/* Hero Section */}
         <div className="pp-hero">
           <div className="pp-stripe" />
           <div className="pp-hbody">
             <div className="pp-htop">
               <div className="pp-avwrap">
                 <div className="pp-av" onClick={() => fileRef.current?.click()}>
-                  {avatarSrc
-                    ? <img src={avatarSrc} alt="avatar" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span>{form.name?.[0]?.toUpperCase() ?? 'U'}</span>
-                  }
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="avatar" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span>{form.name?.[0]?.toUpperCase() ?? 'U'}</span>
+                  )}
                   <div className="pp-av-overlay">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                       <path d="M3 13.5V15h1.5l8.75-8.75-1.5-1.5L3 13.5z" fill="#B5D4F4" />
@@ -363,7 +401,7 @@ export default function UserProfiles() {
           </div>
         </div>
 
-        {/* ── Row 1 ── */}
+        {/* Row 1 */}
         <div className="pp-grid">
           {/* Info perso */}
           <div className="pp-card">
@@ -393,8 +431,8 @@ export default function UserProfiles() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[
                   { label: 'Mot de passe actuel', key: 'cur' as const, show: showPwCur, toggle: () => setShowPwCur(p => !p), placeholder: '••••••••' },
-                  { label: 'Nouveau',             key: 'nw'  as const, show: showPwNew, toggle: () => setShowPwNew(p => !p), placeholder: 'Min. 8 caractères' },
-                  { label: 'Confirmer',           key: 'conf'as const, show: false,     toggle: () => {},                    placeholder: '••••••••' },
+                  { label: 'Nouveau', key: 'nw' as const, show: showPwNew, toggle: () => setShowPwNew(p => !p), placeholder: 'Min. 8 caractères' },
+                  { label: 'Confirmer', key: 'conf' as const, show: false, toggle: () => {}, placeholder: '••••••••' },
                 ].map(f => (
                   <div key={f.key}>
                     <div className="pp-fkey" style={{ marginBottom: 4 }}>{f.label}</div>
@@ -425,7 +463,7 @@ export default function UserProfiles() {
               </div>
             </div>
 
-            {/* Photo upload */}
+            {/* ⭐⭐⭐ Photo upload avec bouton supprimer ⭐⭐⭐ */}
             <div className="pp-card">
               <h3 className="pp-card-ttl">Photo de profil</h3>
               <div className="pp-upload" onClick={() => fileRef.current?.click()}>
@@ -437,47 +475,36 @@ export default function UserProfiles() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#378ADD' }}>Cliquer pour uploader</div>
                 <div style={{ fontSize: 12, color: 'var(--color-gray-400,#9ca3af)' }}>PNG, JPG — max 2 MB</div>
               </div>
+              
+              {/* Bouton supprimer la photo */}
+              {avatarSrc && (
+                <button 
+                  onClick={handleDeleteAvatar}
+                  style={{
+                    marginTop: 12,
+                    width: '100%',
+                    padding: '8px',
+                    background: 'rgba(239,68,68,.07)',
+                    color: '#dc2626',
+                    border: '1px solid rgba(239,68,68,.2)',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    transition: 'all .15s'
+                  }}
+                >
+                  Supprimer la photo
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ── Row 2 ── */}
-        <div className="pp-grid">
-          {/* Notifications */}
-          <div className="pp-card">
-            <h3 className="pp-card-ttl">Notifications</h3>
-            {notifs.map((n, i) => (
-              <div className="pp-notif" key={n.label}>
-                <div>
-                  <div className="pp-nlbl">{n.label}</div>
-                  <div className="pp-nsub">{n.sub}</div>
-                </div>
-                <Toggle on={n.on} onToggle={() => setNotifs(p => p.map((x, j) => j === i ? { ...x, on: !x.on } : x))} />
-              </div>
-            ))}
-          </div>
 
-          {/* Activité */}
-          <div className="pp-card">
-            <h3 className="pp-card-ttl">Activité récente</h3>
-            {activityItems.map(a => (
-              <div className="pp-act" key={a.label}>
-                <div className="pp-act-icon" style={{ background: a.bg }}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <circle cx="8" cy="8" r="6" stroke={a.color} strokeWidth="1.2" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="pp-act-lbl">{a.label}</div>
-                  <div className="pp-act-time">{a.time}</div>
-                </div>
-                <span className="pp-act-badge" style={{ background: a.bg, color: a.color }}>{a.badge}</span>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* ── Session bar ── */}
+        {/* Session bar */}
         <div className="pp-session">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="pp-odot" />
@@ -487,7 +514,6 @@ export default function UserProfiles() {
           </div>
           <button className="pp-btn-danger" onClick={logout}>Se déconnecter</button>
         </div>
-
       </div>
     </>
   );
