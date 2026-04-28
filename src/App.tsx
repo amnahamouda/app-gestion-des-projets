@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import AppLayout from './layout/AppLayout';
 import SignIn from './pages/AuthPages/SignIn';
 import SignUp from './pages/AuthPages/SignUp';
+import ResetPassword from './pages/AuthPages/ResetPassword';
 import NotFound from './pages/OtherPage/NotFound';
 
 import AdminDashboard from './pages/Dashboard/AdminDashboard';
@@ -51,30 +52,27 @@ function DashboardHome() {
 export default function App() {
   return (
     <>
-      {/* Routes */}
       <Routes>
-        <Route path="/signin" element={<SignIn />} />
-        <Route path="/signup" element={<SignUp />} />
+        {/* Public */}
+        <Route path="/signin"         element={<SignIn />} />
+        <Route path="/signup"         element={<SignUp />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
+        {/* Protected */}
         <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardHome />} />
 
-          <Route path="/projects" element={<ProjectsList />} />
+          <Route path="/projects"     element={<ProjectsList />} />
           <Route path="/projects/new" element={<ChefAdminRoute><FormElements /></ChefAdminRoute>} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
 
-          <Route path="/tasks" element={<TasksList />} />
-
-          <Route path="/risk" element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
-
-          <Route path="/team" element={<ChefAdminRoute><TeamPage /></ChefAdminRoute>} />
-
+          <Route path="/tasks"    element={<TasksList />} />
+          <Route path="/risk"     element={<ChefAdminRoute><RiskAnalysis /></ChefAdminRoute>} />
+          <Route path="/team"     element={<ChefAdminRoute><TeamPage /></ChefAdminRoute>} />
           <Route path="/calendar" element={<Calendar />} />
-
-          <Route path="/users" element={<AdminRoute><UsersList /></AdminRoute>} />
-
-          <Route path="/profile" element={<UserProfiles />} />
+          <Route path="/users"    element={<AdminRoute><UsersList /></AdminRoute>} />
+          <Route path="/profile"  element={<UserProfiles />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

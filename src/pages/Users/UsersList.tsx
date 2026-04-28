@@ -26,7 +26,6 @@ interface User {
   status: 'Actif' | 'Inactif';
 }
 
-// Style commun pour les inputs
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 14px',
@@ -71,9 +70,8 @@ export default function UsersList() {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [formLoading, setFormLoading] = useState(false);
-  
-  // Formulaire avec tous les champs du backend
-  const [form, setForm] = useState({
+
+  const emptyForm = {
     nom_complet: '',
     prenom: '',
     email: '',
@@ -93,9 +91,11 @@ export default function UsersList() {
     genre: '',
     situation_familiale: '',
     nombre_enfants: 0,
-  });
+  };
 
-  // Charger les utilisateurs depuis le backend
+  const [form, setForm] = useState(emptyForm);
+
+  // ===================== FETCH USERS =====================
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -105,11 +105,9 @@ export default function UsersList() {
           'Content-Type': 'application/json',
         },
       });
-      
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement');
-      }
-      
+
+      if (!response.ok) throw new Error('Erreur lors du chargement');
+
       const data = await response.json();
       if (data.success) {
         const formattedUsers = data.users.map((u: any) => ({
@@ -129,6 +127,9 @@ export default function UsersList() {
           date_embauche: u.date_embauche,
           date_naissance: u.date_naissance,
           lieu_naissance: u.lieu_naissance,
+          genre: u.genre,
+          situation_familiale: u.situation_familiale,
+          nombre_enfants: u.nombre_enfants,
           status: u.status === 1 ? 'Actif' : 'Inactif',
         }));
         setUsers(formattedUsers);
@@ -140,7 +141,7 @@ export default function UsersList() {
     }
   };
 
-  // Créer un utilisateur via le backend
+  // ===================== CRÉER UTILISATEUR =====================
   const handleCreateUser = async () => {
     if (!form.nom_complet || !form.email || !form.password || !form.departement) {
       setFormError('Nom complet, email, mot de passe et département sont obligatoires.');
@@ -151,7 +152,8 @@ export default function UsersList() {
     setFormError('');
 
     try {
-      const response = await fetch(`${API_URL}/auth/signUp`, {
+      // ✅ FIX: /auth/users au lieu de /auth/signUp
+      const response = await fetch(`${API_URL}/auth/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -185,7 +187,7 @@ export default function UsersList() {
       if (response.ok && data.success) {
         setSuccessMsg(`✅ Utilisateur "${form.nom_complet}" créé avec succès ! Un email lui a été envoyé.`);
         setShowModal(false);
-        resetForm();
+        setForm(emptyForm);
         fetchUsers();
         setTimeout(() => setSuccessMsg(''), 5000);
       } else {
@@ -199,33 +201,10 @@ export default function UsersList() {
     }
   };
 
-  const resetForm = () => {
-    setForm({
-      nom_complet: '',
-      prenom: '',
-      email: '',
-      password: '',
-      role: 'employe',
-      matricule: '',
-      telephone: '',
-      departement: '',
-      poste: '',
-      ville: '',
-      wilaya: '',
-      adresse: '',
-      code_postal: '',
-      date_embauche: '',
-      date_naissance: '',
-      lieu_naissance: '',
-      genre: '',
-      situation_familiale: '',
-      nombre_enfants: 0,
-    });
-  };
-
+  // ===================== SUPPRIMER UTILISATEUR =====================
   const handleDeleteUser = async (id: string, name: string) => {
     if (!window.confirm(`Confirmer la suppression de "${name}" ?`)) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/auth/users/${id}`, {
         method: 'DELETE',
@@ -234,9 +213,9 @@ export default function UsersList() {
           'Content-Type': 'application/json',
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok && data.success) {
         setSuccessMsg(`✅ Utilisateur "${name}" supprimé avec succès`);
         fetchUsers();
@@ -250,6 +229,7 @@ export default function UsersList() {
     }
   };
 
+  // ===================== TOGGLE STATUT =====================
   const handleToggleStatus = async (id: string, currentStatus: number) => {
     try {
       const newStatus = currentStatus === 1 ? 0 : 1;
@@ -261,10 +241,10 @@ export default function UsersList() {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-      
+
       if (response.ok) {
         fetchUsers();
-        setSuccessMsg(`✅ Statut mis à jour`);
+        setSuccessMsg('✅ Statut mis à jour');
         setTimeout(() => setSuccessMsg(''), 3000);
       }
     } catch (error) {
@@ -272,33 +252,12 @@ export default function UsersList() {
     }
   };
 
-  // ===================== ÉTAT POUR LA MODIFICATION =====================
+  // ===================== ÉTAT MODIFICATION =====================
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({
-    nom_complet: '',
-    prenom: '',
-    email: '',
-    password: '',
-    role: 'employe' as UserRole,
-    matricule: '',
-    telephone: '',
-    departement: '',
-    poste: '',
-    ville: '',
-    wilaya: '',
-    adresse: '',
-    code_postal: '',
-    date_embauche: '',
-    date_naissance: '',
-    lieu_naissance: '',
-    genre: '',
-    situation_familiale: '',
-    nombre_enfants: 0,
-  });
+  const [editForm, setEditForm] = useState(emptyForm);
   const [editLoading, setEditLoading] = useState(false);
 
-  // ===================== OUVRIRE LE MODAL DE MODIFICATION =====================
   const openEditModal = (user: User) => {
     setEditingUser(user);
     setEditForm({
@@ -326,82 +285,80 @@ export default function UsersList() {
     setFormError('');
   };
 
-  // ===================== METTRE À JOUR UN UTILISATEUR =====================
- const handleUpdateUser = async () => {
-  if (!editingUser) return;
+  // ===================== METTRE À JOUR UTILISATEUR =====================
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
 
-  if (!editForm.nom_complet || !editForm.email || !editForm.departement) {
-    setFormError('Nom complet, email et département sont obligatoires.');
-    return;
-  }
-
-  setEditLoading(true);
-  setFormError('');
-
-  try {
-    // ✅ Construire l'objet à envoyer
-    const updateData: any = {
-      nom_complet: editForm.nom_complet,
-      prenom: editForm.prenom || null,
-      email: editForm.email,
-      password:editForm.password,
-      role: editForm.role,
-      matricule: editForm.matricule || null,
-      telephone: editForm.telephone || null,
-      departement: editForm.departement,
-      poste: editForm.poste || null,
-      ville: editForm.ville || null,
-      wilaya: editForm.wilaya || null,
-      adresse: editForm.adresse || null,
-      code_postal: editForm.code_postal || null,
-      date_embauche: editForm.date_embauche || null,
-      date_naissance: editForm.date_naissance || null,
-      lieu_naissance: editForm.lieu_naissance || null,
-      genre: editForm.genre || null,
-      situation_familiale: editForm.situation_familiale || null,
-      nombre_enfants: editForm.nombre_enfants || 0,
-    };
-
-    // ✅ Ajouter le mot de passe seulement s'il a été saisi
-    if (editForm.password && editForm.password.trim() !== '') {
-      updateData.password = editForm.password;
+    if (!editForm.nom_complet || !editForm.email || !editForm.departement) {
+      setFormError('Nom complet, email et département sont obligatoires.');
+      return;
     }
 
-    const response = await fetch(`${API_URL}/auth/users/${editingUser.id}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updateData),
-    });
+    setEditLoading(true);
+    setFormError('');
 
-    const data = await response.json();
+    try {
+      // ✅ FIX: password n'est pas inclus par défaut
+      const updateData: any = {
+        nom_complet: editForm.nom_complet,
+        prenom: editForm.prenom || null,
+        email: editForm.email,
+        role: editForm.role,
+        matricule: editForm.matricule || null,
+        telephone: editForm.telephone || null,
+        departement: editForm.departement,
+        poste: editForm.poste || null,
+        ville: editForm.ville || null,
+        wilaya: editForm.wilaya || null,
+        adresse: editForm.adresse || null,
+        code_postal: editForm.code_postal || null,
+        date_embauche: editForm.date_embauche || null,
+        date_naissance: editForm.date_naissance || null,
+        lieu_naissance: editForm.lieu_naissance || null,
+        genre: editForm.genre || null,
+        situation_familiale: editForm.situation_familiale || null,
+        nombre_enfants: editForm.nombre_enfants || 0,
+      };
 
-    if (response.ok && data.success) {
-      setSuccessMsg(`✅ Utilisateur "${editForm.nom_complet}" modifié avec succès !`);
-      setShowEditModal(false);
-      setEditingUser(null);
-      fetchUsers();
-      setTimeout(() => setSuccessMsg(''), 5000);
-    } else {
-      setFormError(data.message || 'Erreur lors de la modification');
+      // ✅ FIX: يبعث password فقط إذا كان مكتوب
+      if (editForm.password && editForm.password.trim() !== '') {
+        updateData.password = editForm.password;
+      }
+
+      const response = await fetch(`${API_URL}/auth/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccessMsg(`✅ Utilisateur "${editForm.nom_complet}" modifié avec succès !`);
+        setShowEditModal(false);
+        setEditingUser(null);
+        fetchUsers();
+        setTimeout(() => setSuccessMsg(''), 5000);
+      } else {
+        setFormError(data.message || 'Erreur lors de la modification');
+      }
+    } catch (error) {
+      console.error('Erreur modification:', error);
+      setFormError('Erreur de connexion au serveur');
+    } finally {
+      setEditLoading(false);
     }
-  } catch (error) {
-    console.error('Erreur modification:', error);
-    setFormError('Erreur de connexion au serveur');
-  } finally {
-    setEditLoading(false);
-  }
-};
-  // Charger les users au montage
+  };
+
   useEffect(() => {
     if (isAdmin && token) {
       fetchUsers();
     }
   }, [isAdmin, token]);
 
-  // Filtrer les utilisateurs
   const filteredUsers = users.filter((u) =>
     u.nom_complet?.toLowerCase().includes(search.toLowerCase()) ||
     u.email?.toLowerCase().includes(search.toLowerCase()) ||
@@ -440,7 +397,7 @@ export default function UsersList() {
           </p>
         </div>
         <button
-          onClick={() => { setShowModal(true); setFormError(''); resetForm(); }}
+          onClick={() => { setShowModal(true); setFormError(''); setForm(emptyForm); }}
           style={{
             padding: '10px 20px',
             background: 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
@@ -460,7 +417,7 @@ export default function UsersList() {
       {/* Messages */}
       {successMsg && (
         <div style={{ padding: '12px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', color: '#166534', fontSize: '14px' }}>
-          ✓ {successMsg}
+          {successMsg}
         </div>
       )}
 
@@ -481,7 +438,7 @@ export default function UsersList() {
         onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
       />
 
-      {/* Tableau des utilisateurs */}
+      {/* Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -490,7 +447,7 @@ export default function UsersList() {
                 {['Utilisateur', 'Matricule', 'Email', 'Rôle', 'Département', 'Poste', 'Statut', 'Actions'].map((h) => (
                   <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: '#475569', fontSize: '13px' }}>{h}</th>
                 ))}
-                </tr>
+              </tr>
             </thead>
             <tbody>
               {filteredUsers.map((u) => {
@@ -545,21 +502,14 @@ export default function UsersList() {
                           onClick={() => openEditModal(u)}
                           style={{
                             padding: '5px 10px',
-                            background: '#eff6ff',
-                            color: '#1e40af',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
+                            background: '#eff6ff', color: '#1e40af',
+                            border: 'none', borderRadius: '8px',
+                            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '4px',
                           }}
                         >
                           ✏️ Modifier
                         </button>
-                        
                         <button
                           onClick={() => handleDeleteUser(u.id, u.nom_complet)}
                           style={{
@@ -581,114 +531,56 @@ export default function UsersList() {
         </div>
       </div>
 
-      {/* ===================== MODAL DE CRÉATION ===================== */}
+      {/* ===================== MODAL CRÉATION ===================== */}
       {showModal && (
         <div
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '1rem',
-            overflowY: 'auto',
-          }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}
           onClick={() => setShowModal(false)}
         >
           <div
-            style={{
-              background: '#fff', borderRadius: '20px',
-              width: '100%', maxWidth: '700px',
-              padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-              maxHeight: '90vh', overflowY: 'auto',
-            }}
+            style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '700px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                ➕ Créer un utilisateur
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}
-              >
-                ×
-              </button>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>➕ Créer un utilisateur</h2>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleCreateUser(); }}>
-              {/* Section 1: Informations obligatoires */}
+              {/* Obligatoires */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  📋 Informations obligatoires
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>📋 Informations obligatoires</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Nom complet *</label>
-                    <input
-                      type="text"
-                      value={form.nom_complet}
-                      onChange={(e) => setForm({ ...form, nom_complet: e.target.value })}
-                      placeholder="Ex: Jean Dupont"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.nom_complet} onChange={(e) => setForm({ ...form, nom_complet: e.target.value })} placeholder="Ex: Jean Dupont" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Prénom</label>
-                    <input
-                      type="text"
-                      value={form.prenom}
-                      onChange={(e) => setForm({ ...form, prenom: e.target.value })}
-                      placeholder="Ex: Jean"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} placeholder="Ex: Jean" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Email *</label>
-                    <input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      placeholder="email@maisonweb.com"
-                      style={inputStyle}
-                    />
+                    <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@maisonweb.com" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Mot de passe *</label>
-                    <input
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      placeholder="••••••••"
-                      style={inputStyle}
-                    />
+                    <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="••••••••" style={inputStyle} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 2: Informations professionnelles */}
+              {/* Professionnelles */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  💼 Informations professionnelles
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>💼 Informations professionnelles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Matricule</label>
-                    <input
-                      type="text"
-                      value={form.matricule}
-                      onChange={(e) => setForm({ ...form, matricule: e.target.value })}
-                      placeholder="Ex: MW-2024-001"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} placeholder="Ex: MW-2024-001" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Téléphone</label>
-                    <input
-                      type="tel"
-                      value={form.telephone}
-                      onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-                      placeholder="+213 5XX XX XX XX"
-                      style={inputStyle}
-                    />
+                    <input type="tel" value={form.telephone} onChange={(e) => setForm({ ...form, telephone: e.target.value })} placeholder="+213 5XX XX XX XX" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Rôle *</label>
@@ -698,18 +590,8 @@ export default function UsersList() {
                         { value: 'chef_projet', label: 'Chef Projet', icon: '🎯' },
                         { value: 'admin', label: 'Administrateur', icon: '⚙️' },
                       ].map((r) => (
-                        <button
-                          key={r.value}
-                          type="button"
-                          onClick={() => setForm({ ...form, role: r.value as UserRole })}
-                          style={{
-                            padding: '10px 8px', borderRadius: '8px',
-                            border: `2px solid ${form.role === r.value ? '#1e3a8a' : '#e2e8f0'}`,
-                            background: form.role === r.value ? '#eff6ff' : '#f8fafc',
-                            color: form.role === r.value ? '#1e3a8a' : '#374151',
-                            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                          }}
-                        >
+                        <button key={r.value} type="button" onClick={() => setForm({ ...form, role: r.value as UserRole })}
+                          style={{ padding: '10px 8px', borderRadius: '8px', border: `2px solid ${form.role === r.value ? '#1e3a8a' : '#e2e8f0'}`, background: form.role === r.value ? '#eff6ff' : '#f8fafc', color: form.role === r.value ? '#1e3a8a' : '#374151', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                           <div style={{ fontSize: '16px', marginBottom: '4px' }}>{r.icon}</div>
                           {r.label}
                         </button>
@@ -718,117 +600,57 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Département *</label>
-                    <input
-                      type="text"
-                      value={form.departement}
-                      onChange={(e) => setForm({ ...form, departement: e.target.value })}
-                      placeholder="Ex: Développement, Design, QA..."
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.departement} onChange={(e) => setForm({ ...form, departement: e.target.value })} placeholder="Ex: Développement, Design..." style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Poste</label>
-                    <input
-                      type="text"
-                      value={form.poste}
-                      onChange={(e) => setForm({ ...form, poste: e.target.value })}
-                      placeholder="Ex: Développeur Full Stack"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.poste} onChange={(e) => setForm({ ...form, poste: e.target.value })} placeholder="Ex: Développeur Full Stack" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Date d'embauche</label>
-                    <input
-                      type="date"
-                      value={form.date_embauche}
-                      onChange={(e) => setForm({ ...form, date_embauche: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="date" value={form.date_embauche} onChange={(e) => setForm({ ...form, date_embauche: e.target.value })} style={inputStyle} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 3: Adresse */}
+              {/* Adresse */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  📍 Adresse
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>📍 Adresse</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div style={{ gridColumn: 'span 2' }}>
                     <label style={labelStyle}>Adresse</label>
-                    <input
-                      type="text"
-                      value={form.adresse}
-                      onChange={(e) => setForm({ ...form, adresse: e.target.value })}
-                      placeholder="Rue, numéro, résidence..."
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.adresse} onChange={(e) => setForm({ ...form, adresse: e.target.value })} placeholder="Rue, numéro, résidence..." style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Ville</label>
-                    <input
-                      type="text"
-                      value={form.ville}
-                      onChange={(e) => setForm({ ...form, ville: e.target.value })}
-                      placeholder="Ex: Alger"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.ville} onChange={(e) => setForm({ ...form, ville: e.target.value })} placeholder="Ex: Alger" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Wilaya</label>
-                    <input
-                      type="text"
-                      value={form.wilaya}
-                      onChange={(e) => setForm({ ...form, wilaya: e.target.value })}
-                      placeholder="Ex: Alger"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.wilaya} onChange={(e) => setForm({ ...form, wilaya: e.target.value })} placeholder="Ex: Alger" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Code postal</label>
-                    <input
-                      type="text"
-                      value={form.code_postal}
-                      onChange={(e) => setForm({ ...form, code_postal: e.target.value })}
-                      placeholder="Ex: 16000"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.code_postal} onChange={(e) => setForm({ ...form, code_postal: e.target.value })} placeholder="Ex: 16000" style={inputStyle} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 4: Informations personnelles */}
+              {/* Personnelles */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  👤 Informations personnelles
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>👤 Informations personnelles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Date de naissance</label>
-                    <input
-                      type="date"
-                      value={form.date_naissance}
-                      onChange={(e) => setForm({ ...form, date_naissance: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="date" value={form.date_naissance} onChange={(e) => setForm({ ...form, date_naissance: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Lieu de naissance</label>
-                    <input
-                      type="text"
-                      value={form.lieu_naissance}
-                      onChange={(e) => setForm({ ...form, lieu_naissance: e.target.value })}
-                      placeholder="Ex: Alger"
-                      style={inputStyle}
-                    />
+                    <input type="text" value={form.lieu_naissance} onChange={(e) => setForm({ ...form, lieu_naissance: e.target.value })} placeholder="Ex: Alger" style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Genre</label>
-                    <select
-                      value={form.genre}
-                      onChange={(e) => setForm({ ...form, genre: e.target.value })}
-                      style={inputStyle}
-                    >
+                    <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} style={inputStyle}>
                       <option value="">Sélectionner</option>
                       <option value="Homme">Homme</option>
                       <option value="Femme">Femme</option>
@@ -837,11 +659,7 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Situation familiale</label>
-                    <select
-                      value={form.situation_familiale}
-                      onChange={(e) => setForm({ ...form, situation_familiale: e.target.value })}
-                      style={inputStyle}
-                    >
+                    <select value={form.situation_familiale} onChange={(e) => setForm({ ...form, situation_familiale: e.target.value })} style={inputStyle}>
                       <option value="">Sélectionner</option>
                       <option value="Célibataire">Célibataire</option>
                       <option value="Marié(e)">Marié(e)</option>
@@ -851,41 +669,19 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Nombre d'enfants</label>
-                    <input
-                      type="number"
-                      value={form.nombre_enfants}
-                      onChange={(e) => setForm({ ...form, nombre_enfants: parseInt(e.target.value) || 0 })}
-                      min="0"
-                      style={inputStyle}
-                    />
+                    <input type="number" value={form.nombre_enfants} onChange={(e) => setForm({ ...form, nombre_enfants: parseInt(e.target.value) || 0 })} min="0" style={inputStyle} />
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    flex: 1, padding: '12px',
-                    border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                    background: '#fff', color: '#475569',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
+                <button type="button" onClick={() => setShowModal(false)}
+                  style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                   Annuler
                 </button>
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  style={{
-                    flex: 1, padding: '12px',
-                    background: formLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
-                    color: '#fff', border: 'none', borderRadius: '10px',
-                    fontSize: '14px', fontWeight: 600, cursor: formLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {formLoading ? 'Création en cours...' : '✅ Créer l\'utilisateur'}
+                <button type="submit" disabled={formLoading}
+                  style={{ flex: 1, padding: '12px', background: formLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: formLoading ? 'not-allowed' : 'pointer' }}>
+                  {formLoading ? 'Création en cours...' : "✅ Créer l'utilisateur"}
                 </button>
               </div>
 
@@ -897,112 +693,57 @@ export default function UsersList() {
         </div>
       )}
 
-      {/* ===================== MODAL DE MODIFICATION ===================== */}
+      {/* ===================== MODAL MODIFICATION ===================== */}
       {showEditModal && editingUser && (
         <div
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: '1rem',
-            overflowY: 'auto',
-          }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}
           onClick={() => setShowEditModal(false)}
         >
           <div
-            style={{
-              background: '#fff', borderRadius: '20px',
-              width: '100%', maxWidth: '700px',
-              padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-              maxHeight: '90vh', overflowY: 'auto',
-            }}
+            style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '700px', padding: '2rem', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                ✏️ Modifier l'utilisateur
-              </h2>
-              <button
-                onClick={() => setShowEditModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}
-              >
-                ×
-              </button>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>✏️ Modifier l'utilisateur</h2>
+              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', fontSize: '28px', cursor: 'pointer', color: '#94a3b8' }}>×</button>
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleUpdateUser(); }}>
-              {/* Section 1: Informations obligatoires */}
+              {/* Obligatoires */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  📋 Informations obligatoires
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>📋 Informations obligatoires</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Nom complet *</label>
-                    <input
-                      type="text"
-                      value={editForm.nom_complet}
-                      onChange={(e) => setEditForm({ ...editForm, nom_complet: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.nom_complet} onChange={(e) => setEditForm({ ...editForm, nom_complet: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Prénom</label>
-                    <input
-                      type="text"
-                      value={editForm.prenom}
-                      onChange={(e) => setEditForm({ ...editForm, prenom: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.prenom} onChange={(e) => setEditForm({ ...editForm, prenom: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Email *</label>
-                    <input
-                      type="email"
-                      value={editForm.email}
-                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Mot de passe</label>
+                    <input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Laisser vide pour ne pas modifier" style={inputStyle} />
+                    <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>🔒 Laissez vide pour conserver le mot de passe actuel</p>
                   </div>
                 </div>
-                 <div>
-              <label style={labelStyle}>Mot de passe</label>
-              <input
-                type="password"
-                value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                placeholder="Laisser vide pour ne pas modifier"
-                style={inputStyle}
-              />
-              <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>
-                🔒 Laissez vide pour conserver le mot de passe actuel
-              </p>
-            </div>
               </div>
 
-              {/* Section 2: Informations professionnelles */}
+              {/* Professionnelles */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  💼 Informations professionnelles
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>💼 Informations professionnelles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Matricule</label>
-                    <input
-                      type="text"
-                      value={editForm.matricule}
-                      onChange={(e) => setEditForm({ ...editForm, matricule: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.matricule} onChange={(e) => setEditForm({ ...editForm, matricule: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Téléphone</label>
-                    <input
-                      type="tel"
-                      value={editForm.telephone}
-                      onChange={(e) => setEditForm({ ...editForm, telephone: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="tel" value={editForm.telephone} onChange={(e) => setEditForm({ ...editForm, telephone: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Rôle *</label>
@@ -1012,18 +753,8 @@ export default function UsersList() {
                         { value: 'chef_projet', label: 'Chef Projet', icon: '🎯' },
                         { value: 'admin', label: 'Administrateur', icon: '⚙️' },
                       ].map((r) => (
-                        <button
-                          key={r.value}
-                          type="button"
-                          onClick={() => setEditForm({ ...editForm, role: r.value as UserRole })}
-                          style={{
-                            padding: '10px 8px', borderRadius: '8px',
-                            border: `2px solid ${editForm.role === r.value ? '#1e3a8a' : '#e2e8f0'}`,
-                            background: editForm.role === r.value ? '#eff6ff' : '#f8fafc',
-                            color: editForm.role === r.value ? '#1e3a8a' : '#374151',
-                            fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                          }}
-                        >
+                        <button key={r.value} type="button" onClick={() => setEditForm({ ...editForm, role: r.value as UserRole })}
+                          style={{ padding: '10px 8px', borderRadius: '8px', border: `2px solid ${editForm.role === r.value ? '#1e3a8a' : '#e2e8f0'}`, background: editForm.role === r.value ? '#eff6ff' : '#f8fafc', color: editForm.role === r.value ? '#1e3a8a' : '#374151', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                           <div style={{ fontSize: '16px', marginBottom: '4px' }}>{r.icon}</div>
                           {r.label}
                         </button>
@@ -1032,110 +763,57 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Département *</label>
-                    <input
-                      type="text"
-                      value={editForm.departement}
-                      onChange={(e) => setEditForm({ ...editForm, departement: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.departement} onChange={(e) => setEditForm({ ...editForm, departement: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Poste</label>
-                    <input
-                      type="text"
-                      value={editForm.poste}
-                      onChange={(e) => setEditForm({ ...editForm, poste: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.poste} onChange={(e) => setEditForm({ ...editForm, poste: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Date d'embauche</label>
-                    <input
-                      type="date"
-                      value={editForm.date_embauche}
-                      onChange={(e) => setEditForm({ ...editForm, date_embauche: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="date" value={editForm.date_embauche} onChange={(e) => setEditForm({ ...editForm, date_embauche: e.target.value })} style={inputStyle} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 3: Adresse */}
+              {/* Adresse */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  📍 Adresse
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>📍 Adresse</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div style={{ gridColumn: 'span 2' }}>
                     <label style={labelStyle}>Adresse</label>
-                    <input
-                      type="text"
-                      value={editForm.adresse}
-                      onChange={(e) => setEditForm({ ...editForm, adresse: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.adresse} onChange={(e) => setEditForm({ ...editForm, adresse: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Ville</label>
-                    <input
-                      type="text"
-                      value={editForm.ville}
-                      onChange={(e) => setEditForm({ ...editForm, ville: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.ville} onChange={(e) => setEditForm({ ...editForm, ville: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Wilaya</label>
-                    <input
-                      type="text"
-                      value={editForm.wilaya}
-                      onChange={(e) => setEditForm({ ...editForm, wilaya: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.wilaya} onChange={(e) => setEditForm({ ...editForm, wilaya: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Code postal</label>
-                    <input
-                      type="text"
-                      value={editForm.code_postal}
-                      onChange={(e) => setEditForm({ ...editForm, code_postal: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.code_postal} onChange={(e) => setEditForm({ ...editForm, code_postal: e.target.value })} style={inputStyle} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 4: Informations personnelles */}
+              {/* Personnelles */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>
-                  👤 Informations personnelles
-                </h3>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '12px', borderBottom: '2px solid #e2e8f0', paddingBottom: '6px' }}>👤 Informations personnelles</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={labelStyle}>Date de naissance</label>
-                    <input
-                      type="date"
-                      value={editForm.date_naissance}
-                      onChange={(e) => setEditForm({ ...editForm, date_naissance: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="date" value={editForm.date_naissance} onChange={(e) => setEditForm({ ...editForm, date_naissance: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Lieu de naissance</label>
-                    <input
-                      type="text"
-                      value={editForm.lieu_naissance}
-                      onChange={(e) => setEditForm({ ...editForm, lieu_naissance: e.target.value })}
-                      style={inputStyle}
-                    />
+                    <input type="text" value={editForm.lieu_naissance} onChange={(e) => setEditForm({ ...editForm, lieu_naissance: e.target.value })} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Genre</label>
-                    <select
-                      value={editForm.genre}
-                      onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
-                      style={inputStyle}
-                    >
+                    <select value={editForm.genre} onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })} style={inputStyle}>
                       <option value="">Sélectionner</option>
                       <option value="Homme">Homme</option>
                       <option value="Femme">Femme</option>
@@ -1144,11 +822,7 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Situation familiale</label>
-                    <select
-                      value={editForm.situation_familiale}
-                      onChange={(e) => setEditForm({ ...editForm, situation_familiale: e.target.value })}
-                      style={inputStyle}
-                    >
+                    <select value={editForm.situation_familiale} onChange={(e) => setEditForm({ ...editForm, situation_familiale: e.target.value })} style={inputStyle}>
                       <option value="">Sélectionner</option>
                       <option value="Célibataire">Célibataire</option>
                       <option value="Marié(e)">Marié(e)</option>
@@ -1158,40 +832,18 @@ export default function UsersList() {
                   </div>
                   <div>
                     <label style={labelStyle}>Nombre d'enfants</label>
-                    <input
-                      type="number"
-                      value={editForm.nombre_enfants}
-                      onChange={(e) => setEditForm({ ...editForm, nombre_enfants: parseInt(e.target.value) || 0 })}
-                      min="0"
-                      style={inputStyle}
-                    />
+                    <input type="number" value={editForm.nombre_enfants} onChange={(e) => setEditForm({ ...editForm, nombre_enfants: parseInt(e.target.value) || 0 })} min="0" style={inputStyle} />
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  style={{
-                    flex: 1, padding: '12px',
-                    border: '1.5px solid #e2e8f0', borderRadius: '10px',
-                    background: '#fff', color: '#475569',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
+                <button type="button" onClick={() => setShowEditModal(false)}
+                  style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', background: '#fff', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                   Annuler
                 </button>
-                <button
-                  type="submit"
-                  disabled={editLoading}
-                  style={{
-                    flex: 1, padding: '12px',
-                    background: editLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)',
-                    color: '#fff', border: 'none', borderRadius: '10px',
-                    fontSize: '14px', fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer',
-                  }}
-                >
+                <button type="submit" disabled={editLoading}
+                  style={{ flex: 1, padding: '12px', background: editLoading ? '#94a3b8' : 'linear-gradient(135deg, #1e3a8a, #1d4ed8)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: editLoading ? 'not-allowed' : 'pointer' }}>
                   {editLoading ? 'Modification...' : '💾 Enregistrer les modifications'}
                 </button>
               </div>
