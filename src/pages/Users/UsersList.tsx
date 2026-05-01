@@ -70,6 +70,7 @@ export default function UsersList() {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<string>('all');
 
   const emptyForm = {
     nom_complet: '',
@@ -359,11 +360,16 @@ export default function UsersList() {
     }
   }, [isAdmin, token]);
 
-  const filteredUsers = users.filter((u) =>
+  const filteredUsers = users.filter((u) => {
+  const matchSearch =
     u.nom_complet?.toLowerCase().includes(search.toLowerCase()) ||
     u.email?.toLowerCase().includes(search.toLowerCase()) ||
-    u.matricule?.toLowerCase().includes(search.toLowerCase())
-  );
+    u.matricule?.toLowerCase().includes(search.toLowerCase());
+
+  const matchRole = roleFilter === 'all' || u.role === roleFilter;
+
+  return matchSearch && matchRole;
+});
 
   if (!isAdmin) {
     return (
@@ -437,6 +443,41 @@ export default function UsersList() {
         onFocus={(e) => { e.currentTarget.style.borderColor = '#1e3a8a'; e.currentTarget.style.background = '#fff'; }}
         onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
       />
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+  {[
+    { value: 'all',        label: '👥 Tous',          bg: '#f1f5f9', color: '#475569' },
+    { value: 'employe',    label: '💼 Employés',       bg: '#dcfce7', color: '#166534' },
+    { value: 'chef_projet',label: '🎯 Chefs de projet',bg: '#dbeafe', color: '#1e40af' },
+  ].map((f) => (
+    <button
+      key={f.value}
+      onClick={() => setRoleFilter(f.value)}
+      style={{
+        padding: '7px 14px',
+        borderRadius: '20px',
+        border: `2px solid ${roleFilter === f.value ? f.color : '#e2e8f0'}`,
+        background: roleFilter === f.value ? f.bg : '#fff',
+        color: roleFilter === f.value ? f.color : '#94a3b8',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+      }}
+    >
+      {f.label}
+      <span style={{
+        marginLeft: '6px',
+        background: roleFilter === f.value ? f.color : '#e2e8f0',
+        color: roleFilter === f.value ? '#fff' : '#64748b',
+        borderRadius: '10px',
+        padding: '1px 7px',
+        fontSize: '11px',
+      }}>
+        {f.value === 'all' ? users.length : users.filter(u => u.role === f.value).length}
+      </span>
+    </button>
+  ))}
+</div>
 
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>

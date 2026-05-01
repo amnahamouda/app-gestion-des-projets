@@ -10,8 +10,9 @@ const navItems = [
   { path: '/team', label: "Gestion de l'équipe", icon: '👥', roles: ['chef_projet', 'admin'] },
   { path: '/calendar', label: 'Calendrier', icon: '📅', roles: ['chef_projet', 'employe'] },
   { path: '/users', label: 'Utilisateurs', icon: '🔧', roles: ['admin'] },
-  { path: '/profile', label: 'Mon profil', icon: '👤', roles: ['admin', 'chef_projet', 'employe'] },
   { path: '/settings', label: 'Paramètres', icon: '⚙️', roles: ['admin', 'chef_projet', 'employe'] },
+  { path: '/profile', label: 'Mon profil', icon: '👤', roles: ['admin', 'chef_projet', 'employe'] },
+  
 ];
 
 export default function AppSidebar() {
