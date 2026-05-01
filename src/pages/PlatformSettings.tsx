@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+const getToken = () => localStorage.getItem('token') || '';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TabId = 'general' | 'users' | 'security' | 'email' | 'appearance' |

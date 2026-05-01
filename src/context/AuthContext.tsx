@@ -12,7 +12,7 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
-   token: string | null;
+  token: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole }>;
   logout: () => void;
   isAdmin: boolean;
@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('mdw-user');
     return stored ? JSON.parse(stored) : null;
   });
-  
+
   const [token, setToken] = useState<string | null>(() => {
     return localStorage.getItem('mdw-token');
   });
@@ -53,43 +53,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         department: data.user.departement ?? '',
       };
 
+      // ✅ حفظ التوكن أولاً قبل setUser
       localStorage.setItem('mdw-token', data.token);
       localStorage.setItem('mdw-user', JSON.stringify(loggedUser));
+      setToken(data.token);
       setUser(loggedUser);
+
       return { success: true, role: loggedUser.role };
 
     } catch {
       // Fallback mock si backend indisponible
       const MOCK_USERS: AuthUser[] = [
-        { id: 'U0', name: 'Admin MDW', email: 'admin@maisonweb.com', role: 'admin', department: 'Direction' },
-        { id: 'U1', name: 'Amine Belhadj', email: 'chef@maisonweb.com', role: 'chef_projet', department: 'Développement' },
-        { id: 'U2', name: 'Sara Mansouri', email: 'employe@maisonweb.com', role: 'employe', department: 'Développement' },
+        { id: 'U0', name: 'Admin MDW',      email: 'admin@maisonweb.com',  role: 'admin',       department: 'Direction' },
+        { id: 'U1', name: 'Amine Belhadj',  email: 'chef@maisonweb.com',   role: 'chef_projet', department: 'Développement' },
+        { id: 'U2', name: 'Sara Mansouri',  email: 'employe@maisonweb.com', role: 'employe',    department: 'Développement' },
       ];
+
       if (password !== 'password') return { success: false };
       const found = MOCK_USERS.find((u) => u.email === email);
       if (!found) return { success: false };
-      setUser(found);
+
+      // ✅ توكن وهمي في mock mode
+      const mockToken = 'mock-token-' + found.role;
+      localStorage.setItem('mdw-token', mockToken);
       localStorage.setItem('mdw-user', JSON.stringify(found));
+      setToken(mockToken);
+      setUser(found);
+
       return { success: true, role: found.role };
     }
   };
 
   const logout = async () => {
     try {
-      const token = localStorage.getItem('mdw-token');
-      if (token) {
+      const currentToken = localStorage.getItem('mdw-token');
+      if (currentToken) {
         await fetch(`${API_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${currentToken}`,
           },
         });
       }
     } catch {
       // ignore
     }
+
     setUser(null);
+    setToken(null);
     localStorage.removeItem('mdw-token');
     localStorage.removeItem('mdw-user');
   };
@@ -97,11 +109,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
-      token, 
+      token,
       login,
       logout,
-      isAdmin: user?.role === 'admin',
-      isChef: user?.role === 'chef_projet',
+      isAdmin:   user?.role === 'admin',
+      isChef:    user?.role === 'chef_projet',
       isEmploye: user?.role === 'employe',
     }}>
       {children}
